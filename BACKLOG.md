@@ -15,11 +15,12 @@ Roadmap a milestone. **M1** è la v0.1 (fatta): misurare una griglia e leggerne 
 
 ## M2 — Rendere il risultato difendibile (~v0.2)
 
-- [ ] **LB-7 — BD-rate**: differenza di bitrate a parità di qualità fra due encoder/preset sull'intervallo comune (Bjøntegaard). È il numero che si porta in una discussione "vale la pena passare ad AV1?".
+- [x] **LB-7 — BD-rate**: differenza di bitrate a parità di qualità fra due encoder/preset sull'intervallo comune (Bjøntegaard). È il numero che si porta in una discussione "vale la pena passare ad AV1?". _(v0.2.0)_
 - [ ] **LB-8 — Metriche affiancate**: PSNR e SSIM insieme a VMAF nello stesso passaggio (`libvmaf` le espone come feature), più il VMAF **harmonic mean** già letto ma non ancora mostrato — è la colonna che smaschera i clip con pochi secondi rotti.
 - [ ] **LB-9 — Percentili per-frame**: il log per-frame è già scritto; esporre p1/p5 dei frame peggiori. Un rung con media 93 e p1 a 70 non è un rung da 93.
 - [ ] **LB-10 — Intervallo di confidenza sul clip**: più clip di riferimento dallo stesso sorgente (`clips:` invece di `clip:`) e riporto della dispersione. Una ladder scelta su 30 secondi fortunati è una ladder scelta a caso.
 - [ ] **LB-11 — Riproducibilità**: nel report le versioni di ffmpeg/libvmaf/encoder e l'hash della config, così un run vecchio si può replicare o scartare consapevolmente.
+- [ ] **LB-21 — Coda di stderr più lunga sul punto rotto**: `tail(stderr, 8)` taglia via la riga della libreria dell'encoder, che è dove sta la causa vera; sopra restano solo le otto righe di cascata di ffmpeg. Visto dal vivo con SVT-AV1: `Svt[error]: Max Bitrate only supported with CRF mode` finiva appena fuori dalla finestra.
 
 ## M3 — Portarlo dove si decide (~v0.3)
 
@@ -34,3 +35,4 @@ Roadmap a milestone. **M1** è la v0.1 (fatta): misurare una griglia e leggerne 
 - [ ] **LB-17 — Per-shot / per-scena**: rilevare i cambi scena e riportare la curva per segmento. È il passo verso il per-title vero.
 - [ ] **LB-18 — Profilo live**: griglia con `-preset` bassi e vincoli di latenza, per le ladder di eventi live dove il preset lento non è un'opzione.
 - [ ] **LB-19 — Modello 4K / mobile**: selezione del modello VMAF (`vmaf_4k_v0.6.1`, phone model) coerente con lo schermo di consumo dichiarato, oggi possibile solo scrivendo la stringa a mano.
+- [ ] **LB-20 — Rate control per encoder**: `maxrate`/`bufsize` sono cablati per tutti, ma non tutti li accettano — SVT-AV1 rifiuta il cap fuori da CRF (`Max Bitrate only supported with CRF mode`), quindi oggi l'encoder AV1 più usato non entra in griglia senza aggirare i default. Serve una forma di rate control per famiglia di encoder, mantenendo il vincolo che rende il numero onesto: un rung che sfonda la banda dichiarata non è consegnabile.

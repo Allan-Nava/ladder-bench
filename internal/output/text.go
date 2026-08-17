@@ -32,7 +32,35 @@ func Text(out io.Writer, r Report) error {
 		writeFrontier(w, a, r.Options)
 		writeSavings(w, a)
 	}
+	writeBDRates(w, r.BDRates)
 	return w.err
+}
+
+// writeBDRates renders the cross-encoder comparison. It sits outside the
+// per-encoder loop because a BD-rate belongs to a pair, not to one of them.
+func writeBDRates(w io.Writer, cmps []analysis.Comparison) {
+	if len(cmps) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\nbd-rate vs %s — bitrate for the same measured quality, negative is cheaper\n", cmps[0].Anchor)
+	for _, c := range cmps {
+		fmt.Fprintf(w, "\n  %s\n", c.Test)
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		writeBDLine(tw, "frontier", c.Frontier)
+		for _, bd := range c.ByHeight {
+			writeBDLine(tw, res(bd.Height), bd)
+		}
+		_ = tw.Flush()
+	}
+}
+
+func writeBDLine(w io.Writer, label string, bd analysis.BD) {
+	if !bd.OK() {
+		fmt.Fprintf(w, "    %-8s\t—\t%s\n", label, bd.Note)
+		return
+	}
+	fmt.Fprintf(w, "    %-8s\t%s\tover VMAF %.1f–%.1f\t%s\n",
+		label, pct(bd.RatePct), bd.LowVMAF, bd.HighVMAF, bd.Method)
 }
 
 func writeCurves(w io.Writer, a analysis.Result) {

@@ -2,6 +2,23 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/it/1.1.0/), versioni [SemVer](https://semver.org/lang/it/).
 
+## 0.2.0
+
+### Aggiunto
+
+- **BD-rate fra encoder (LB-7).** Con due o più encoder in config, il run finisce con il numero che chiude la discussione "vale la pena passare ad AV1?": quanto bitrate serve allo sfidante per la **stessa qualità misurata**, in una percentuale sola invece che in due curve da confrontare a occhio. Compare in `text`, `markdown` e `json`, per risoluzione e fra le due frontiere efficienti — la riga `frontier` è la risposta a livello di ladder, dove ogni encoder è libero di scegliere la sua risoluzione migliore a ogni bitrate.
+
+  Tre scelte decidono se quel numero significa qualcosa:
+  - **si integra `log10(bitrate)` su VMAF**, non il bitrate: le differenze di bitrate sono moltiplicative, e mediarle in lineare farebbe pesare la cima della griglia molto più del fondo;
+  - **la media si prende solo sull'intervallo di qualità che entrambi gli encoder hanno raggiunto**, mai sull'unione: fuori dalla sovrapposizione non c'è niente contro cui confrontarsi. Due curve che condividono meno di 1.0 VMAF vengono **rifiutate** invece che stirate per farle combaciare — una percentuale presa su una fessura sembra un verdetto ed è il rumore di due frame;
+  - **con quattro punti o più la curva ha il fit cubico ai minimi quadrati, con due o tre viene interpolata** e il report dice quale dei due: una cubica per tre punti non è un fit, è una curva tirata attraverso il rumore. L'asse qualità è centrato prima del fit, perché VMAF sta intorno a 90 e una cubica non centrata perde precisione solo per condizionamento.
+
+  L'**ancora** è il **primo encoder elencato in config** — quello che si manda in onda oggi — così il segno si legge sempre allo stesso modo: negativo = lo sfidante costa meno. Ordinare gli encoder alfabeticamente avrebbe ribaltato il segno di tutto il report il giorno in cui qualcuno rinomina un preset.
+
+### Corretto
+
+- **Un punto rotto ora dice perché.** Il fail-fast cancella il context, quindi gli encode in volo vengono uccisi e quelli in coda dietro il semaforo si sbloccano: gran parte degli errori di un run fermato sono ricaduta del fermo, e `Run` ne riportava uno di quelli. Il messaggio era `context canceled`, cioè niente da debuggare, mentre la coda di stderr di ffmpeg — che il codice raccoglieva già — non arrivava mai a schermo. Ora l'errore restituito è **quello che ha fermato il run**, e un context cancellato senza nessun punto fallito resta quello che è: un Ctrl-C.
+
 ## 0.1.0
 
 Prima release: misurare una encoding ladder invece di ereditarla.

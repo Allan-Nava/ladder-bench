@@ -17,7 +17,7 @@ match have completely different appetites for bits.
 
 **ladder-bench** replaces that guess with a measurement. It cuts a reference
 clip out of your source, encodes it across a grid of (resolution, bitrate)
-points, scores every point with **VMAF**, and reports three things:
+points, scores every point with **VMAF**, and reports four things:
 
 1. **Where each resolution stops paying** — the bitrate past which more bits
    buy no visible quality.
@@ -26,6 +26,9 @@ points, scores every point with **VMAF**, and reports three things:
 3. **What your ladder should be** — rungs spaced by perceived quality, and what
    the ladder you ship today costs versus what the same quality costs on the
    frontier.
+4. **What another encoder would cost you** — the **BD-rate** against the codec
+   you ship today, measured on your content instead of quoted from a press
+   release.
 
 One static Go binary. No agent, no server, no account. It drives `ffmpeg` and
 `ffprobe`, and every command it runs can be printed before it runs.
@@ -89,6 +92,25 @@ encoder x264-fast (libx264, preset veryfast)
 
 The last block is the one that pays for the run: *this 720p rung delivers VMAF
 88.4, and 1080p delivers the same for 37% fewer bits.*
+
+Put a second encoder in the config and the run ends with the codec question
+answered on your own content:
+
+```
+bd-rate vs x264-fast — bitrate for the same measured quality, negative is cheaper
+
+  x265-fast
+    frontier  -31.9%  over VMAF 85.0–96.1  cubic fit
+    1080p     -24.5%  over VMAF 90.0–96.1  piecewise linear
+    720p      -46.0%  over VMAF 85.0–87.9  piecewise linear
+```
+
+The anchor is the first encoder in the config — the one you ship today. The
+average is taken only over the quality range **both** encoders reached, never
+over the union of the two, and a pair of curves that barely overlap is declined
+rather than stretched to meet. Curves with four or more points get the classic
+least-squares cubic fit; shorter ones are interpolated between the measurements
+and the report says so, because a cubic through three points is not a fit.
 
 ## How it measures
 

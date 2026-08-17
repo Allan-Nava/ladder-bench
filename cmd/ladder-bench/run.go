@@ -90,6 +90,7 @@ func runRun(ctx context.Context, args []string) error {
 		}
 	}
 
+	analyses := analyze(cfg, results)
 	report := output.Report{
 		Tool:      "ladder-bench",
 		Version:   version,
@@ -98,7 +99,8 @@ func runRun(ctx context.Context, args []string) error {
 		Reference: b.Ref,
 		Options:   options(cfg),
 		Results:   results,
-		Analyses:  analyze(cfg, results),
+		Analyses:  analyses,
+		BDRates:   bdRates(cfg, analyses),
 	}
 
 	w := os.Stdout
@@ -124,6 +126,20 @@ func options(cfg *config.Config) analysis.Options {
 		opt.Current = append(opt.Current, analysis.Rendition{Height: r.Height, Kbps: r.Bitrate})
 	}
 	return opt
+}
+
+// bdRates compares every encoder against the first one listed in the config.
+//
+// Config order is where that intent lives: the first encoder is the one already
+// in production, and anchoring on it makes every figure in the report read the
+// same way — negative means the challenger is cheaper. Sorting the encoders
+// alphabetically instead would flip the sign of the whole comparison the day
+// someone renames a preset.
+func bdRates(cfg *config.Config, analyses []analysis.Result) []analysis.Comparison {
+	if len(cfg.Encoders) < 2 {
+		return nil
+	}
+	return analysis.BDRates(cfg.Encoders[0].Name, analyses)
 }
 
 // analyze runs the analysis once per encoder: a hull mixing two codecs would

@@ -68,7 +68,34 @@ func Markdown(out io.Writer, r Report) error {
 
 		writeMarkdownSavings(w, a)
 	}
+	writeMarkdownBDRates(w, r.BDRates)
 	return w.err
+}
+
+func writeMarkdownBDRates(w io.Writer, cmps []analysis.Comparison) {
+	if len(cmps) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\n## BD-rate versus `%s`\n\n", cmps[0].Anchor)
+	fmt.Fprintf(w, "Bitrate needed for the same measured quality, averaged over the range both encoders reached. Negative means fewer bits.\n")
+	for _, c := range cmps {
+		fmt.Fprintf(w, "\n### `%s`\n\n", c.Test)
+		fmt.Fprintln(w, "| Scope | BD-rate | Over | Method |")
+		fmt.Fprintln(w, "|---|---:|---|---|")
+		writeMarkdownBDRow(w, "Efficient frontier", c.Frontier)
+		for _, bd := range c.ByHeight {
+			writeMarkdownBDRow(w, res(bd.Height), bd)
+		}
+	}
+}
+
+func writeMarkdownBDRow(w io.Writer, label string, bd analysis.BD) {
+	if !bd.OK() {
+		fmt.Fprintf(w, "| %s | — | %s | — |\n", label, bd.Note)
+		return
+	}
+	fmt.Fprintf(w, "| %s | %s | VMAF %.1f–%.1f | %s |\n",
+		label, pct(bd.RatePct), bd.LowVMAF, bd.HighVMAF, bd.Method)
 }
 
 func writeMarkdownSavings(w io.Writer, a analysis.Result) {

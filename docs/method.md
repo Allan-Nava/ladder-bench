@@ -104,6 +104,29 @@ measurement. A rung within 5% of the ends of the measured range is snapped to
 the end (rate control never lands on target); further out it is reported as
 outside the grid rather than extrapolated.
 
+**BD-rate (two encoders or more).** The Bjøntegaard delta rate answers "how much
+bitrate does the challenger need for the same quality?" in one percentage, so a
+codec decision does not come down to picking a favourite operating point. The
+anchor is the **first encoder listed in the config** — the one you ship today —
+and negative always means fewer bits.
+
+Both curves are integrated as **log10(bitrate) over VMAF**: bitrate differences
+are multiplicative, so averaging them linearly would let the expensive end of
+the grid outvote the cheap end. With four or more points a curve gets the
+classic least-squares cubic fit; with two or three it is interpolated between
+the measurements instead, and the report says which — a cubic through three
+points is not a fit, it is a curve drawn through noise. The quality axis is
+centred before fitting, because VMAF sits around 90 and an uncentred cubic loses
+most of its precision to conditioning.
+
+The average is taken over the quality range **both** encoders reached, never
+over the union of the two: outside the overlap there is nothing to compare
+against. Curves sharing less than 1.0 VMAF are declined rather than stretched to
+meet — a percentage taken over a sliver looks like a verdict and is really the
+noise of a couple of frames. The report gives a BD-rate per resolution and one
+between the two efficient frontiers; the frontier figure is the ladder-level
+answer, where each encoder is free to pick its best resolution at each bitrate.
+
 ## What this does not measure
 
 - **Your audience.** The savings are per-rung and per-quality, not weighted by

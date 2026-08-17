@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -274,6 +275,50 @@ func TestRunFailsOnABrokenPoint(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "720p @ 1000k") {
 		t.Errorf("the error should name the point, got: %v", err)
+	}
+}
+
+// Stopping the run kills the encodes in flight and unblocks everything queued
+// behind the semaphore, so most of the errors a failed run produces are its own
+// fallout. The one the user gets has to be the one that says what broke — a
+// report of "context canceled" leaves nothing to debug.
+func TestRunReportsTheFailureNotItsOwnCancellation(t *testing.T) {
+	cfg := testConfig(t)
+	exec := &fakeExec{failOn: func(args []string) error {
+		if index(args, "-lavfi") < 0 && strings.Contains(args[len(args)-1], "1080p_4000k") {
+			return fmt.Errorf("Max Bitrate only supported with CRF mode")
+		}
+		return nil
+	}}
+	b := newBench(t, cfg, exec)
+	ctx := context.Background()
+	if err := b.PrepareReference(ctx); err != nil {
+		t.Fatalf("PrepareReference: %v", err)
+	}
+	_, err := b.Run(ctx, Grid(cfg))
+	if err == nil {
+		t.Fatal("Run succeeded with a broken point")
+	}
+	if !strings.Contains(err.Error(), "Max Bitrate only supported") {
+		t.Errorf("the reason ffmpeg gave was lost: %v", err)
+	}
+	if strings.Contains(err.Error(), context.Canceled.Error()) {
+		t.Errorf("the run reported its own cancellation instead of the failure: %v", err)
+	}
+}
+
+// Nothing failed, so a cancelled context can only have come from outside.
+func TestRunPassesOnAnInterruption(t *testing.T) {
+	cfg := testConfig(t)
+	b := newBench(t, cfg, &fakeExec{})
+	if err := b.PrepareReference(context.Background()); err != nil {
+		t.Fatalf("PrepareReference: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := b.Run(ctx, Grid(cfg))
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("an interrupted run should report the interruption, got %v", err)
 	}
 }
 

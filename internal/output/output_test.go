@@ -42,6 +42,77 @@ func sampleReport() Report {
 	}
 }
 
+// challengerReport is the two-encoder case: the same grid measured again by a
+// codec that needs 30% fewer bits everywhere.
+func challengerReport() Report {
+	r := sampleReport()
+	anchor := r.Analyses[0]
+	var cheaper []analysis.Point
+	for _, c := range anchor.Curves {
+		for _, p := range c.Points {
+			p.Encoder = "svt-av1"
+			p.Kbps *= 0.7
+			cheaper = append(cheaper, p)
+		}
+	}
+	r.Analyses = append(r.Analyses, analysis.Analyze("svt-av1", cheaper, r.Options))
+	r.BDRates = analysis.BDRates("x264", r.Analyses)
+	return r
+}
+
+func TestTextReportShowsBDRate(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Text(&buf, challengerReport()); err != nil {
+		t.Fatalf("Text: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{"bd-rate vs x264", "svt-av1", "frontier", "over VMAF", "1080p"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("text report is missing %q:\n%s", want, out)
+		}
+	}
+	// A challenger that is cheaper everywhere must read as fewer bits, and the
+	// sign is the entire message of the section.
+	if !strings.Contains(out, "-3") {
+		t.Errorf("expected a negative BD-rate around -30%%:\n%s", out)
+	}
+}
+
+func TestMarkdownReportShowsBDRate(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Markdown(&buf, challengerReport()); err != nil {
+		t.Fatalf("Markdown: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"## BD-rate versus `x264`", "### `svt-av1`",
+		"| Scope | BD-rate | Over | Method |", "Efficient frontier",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("markdown report is missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// A single-encoder run has nothing to compare, and an empty BD-rate section
+// would read as "we looked and found nothing" instead of "we did not look".
+func TestBDRateSectionIsAbsentForOneEncoder(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Text(&buf, sampleReport()); err != nil {
+		t.Fatalf("Text: %v", err)
+	}
+	if strings.Contains(buf.String(), "bd-rate") {
+		t.Errorf("a one-encoder run must not show a BD-rate section:\n%s", buf.String())
+	}
+	buf.Reset()
+	if err := Markdown(&buf, sampleReport()); err != nil {
+		t.Fatalf("Markdown: %v", err)
+	}
+	if strings.Contains(buf.String(), "BD-rate") {
+		t.Errorf("a one-encoder run must not show a BD-rate section:\n%s", buf.String())
+	}
+}
+
 func TestTextReportCoversEverySection(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Text(&buf, sampleReport()); err != nil {
@@ -89,6 +160,20 @@ func TestJSONReportRoundTrips(t *testing.T) {
 		if _, ok := back[key]; !ok {
 			t.Errorf("JSON report is missing %q", key)
 		}
+	}
+	if _, ok := back["bd_rates"]; ok {
+		t.Error("a one-encoder run must not carry a bd_rates key")
+	}
+
+	buf.Reset()
+	if err := JSON(&buf, challengerReport()); err != nil {
+		t.Fatalf("JSON: %v", err)
+	}
+	if err := json.Unmarshal(buf.Bytes(), &back); err != nil {
+		t.Fatalf("the JSON report is not valid JSON: %v", err)
+	}
+	if _, ok := back["bd_rates"]; !ok {
+		t.Error("JSON report is missing \"bd_rates\"")
 	}
 }
 

@@ -161,9 +161,14 @@ func (b *Bench) Run(ctx context.Context, jobs []Job) ([]Result, error) {
 	defer cancel()
 
 	results := make([]Result, len(jobs))
-	errs := make([]error, len(jobs))
 	sem := make(chan struct{}, max(1, b.Cfg.Concurrency))
 	var wg sync.WaitGroup
+	// failure is the error that stopped the run, kept apart from the fallout it
+	// causes. Cancelling kills the encodes already in flight and unblocks the
+	// ones queued behind the semaphore, so most of the errors a stopped run
+	// produces are collateral — and reporting one of those instead would hide
+	// the only message that says what actually broke.
+	var failure error
 	done := 0
 	for i, job := range jobs {
 		wg.Add(1)
@@ -173,12 +178,15 @@ func (b *Bench) Run(ctx context.Context, jobs []Job) ([]Result, error) {
 			case sem <- struct{}{}:
 				defer func() { <-sem }()
 			case <-ctx.Done():
-				errs[i] = ctx.Err()
 				return
 			}
 			r, err := b.measure(ctx, job)
 			if err != nil {
-				errs[i] = fmt.Errorf("%s %dp @ %dk: %w", job.Encoder, job.Height, job.Kbps, err)
+				b.mu.Lock()
+				if failure == nil && ctx.Err() == nil {
+					failure = fmt.Errorf("%s %dp @ %dk: %w", job.Encoder, job.Height, job.Kbps, err)
+				}
+				b.mu.Unlock()
 				cancel() // one broken point makes the curve a lie; stop early
 				return
 			}
@@ -192,10 +200,13 @@ func (b *Bench) Run(ctx context.Context, jobs []Job) ([]Result, error) {
 		}(i, job)
 	}
 	wg.Wait()
-	for _, err := range errs {
-		if err != nil {
-			return nil, err
-		}
+	if failure != nil {
+		return nil, failure
+	}
+	// No point failed, so a cancelled context can only have come from outside:
+	// someone pressed Ctrl-C.
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	return results, nil
 }

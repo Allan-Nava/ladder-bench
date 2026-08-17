@@ -48,6 +48,11 @@ Each encoder is measured across the **whole** grid, so two encoders double the
 run. Encoders that spell their speed control differently can leave `preset`
 empty and pass it through `extra_args`.
 
+**Order matters when there is more than one.** The first encoder listed is the
+**anchor** of the BD-rate comparison — the one you ship today — and every other
+encoder is reported against it, so a negative percentage always means "the
+challenger is cheaper". List the incumbent first.
+
 ## `rungs`
 
 ```yaml

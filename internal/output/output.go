@@ -22,6 +22,9 @@ type Report struct {
 	Options   analysis.Options  `json:"options"`
 	Results   []bench.Result    `json:"results"`
 	Analyses  []analysis.Result `json:"analysis"`
+	// BDRates compares every other encoder against the anchor. Empty when the
+	// run measured a single encoder: there is nothing to compare it to.
+	BDRates []analysis.Comparison `json:"bd_rates,omitempty"`
 }
 
 // errWriter remembers the first write error so the renderers can stay a
