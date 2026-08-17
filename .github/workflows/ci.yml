@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: ["master", "main"]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt needed on:"; echo "$unformatted"; exit 1
+          fi
+      - run: go vet ./...
+      # The test suite never invokes ffmpeg: the runners have no libvmaf, and a
+      # benchmark tool whose tests need a working encoder cannot be tested at
+      # all. The argument builders are pure functions and the run loop is
+      # driven through a fake executor — see internal/bench/bench_test.go.
+      - name: Test with coverage
+        run: |
+          go test -coverprofile=cover.out ./...
+          echo "### Coverage" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          go tool cover -func=cover.out | tail -1 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          go tool cover -func=cover.out | tail -1
+      - run: go build ./...
+      # The example config is embedded in the binary and is the only copy;
+      # `init` must keep producing something the parser accepts.
+      - name: The starting config stays valid
+        run: |
+          go run ./cmd/ladder-bench init --out /tmp/ladder-bench.yml
+          go run ./cmd/ladder-bench plan --config /tmp/ladder-bench.yml > /dev/null
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+      - name: govulncheck (gate)
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+      - name: golangci-lint (gate)
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2

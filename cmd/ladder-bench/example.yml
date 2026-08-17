@@ -1,0 +1,85 @@
+# ladder-bench — measure an encoding ladder instead of inheriting it.
+#
+# Start here:  ladder-bench doctor  →  ladder-bench plan  →  ladder-bench run
+
+# The source to benchmark. Use real content of the kind you actually ship:
+# a talk show and a football match do not want the same ladder, which is the
+# whole reason this tool exists.
+input: samples/source.mxf
+
+# Where the reference clip, the encodes and the VMAF logs go.
+work_dir: .ladder-bench
+
+# The slice of the source used as reference. Pick a busy, representative
+# stretch — a static intro would make every rung look brilliant.
+# 30 to 60 seconds is usually enough; every extra second is paid once per grid
+# point, so a 12-point grid on a 60s clip is 12 minutes of encoded video.
+clip:
+  start: "60s"
+  duration: "30s"
+
+# How many encodes run at once. The default of 1 is deliberate: the encoders
+# already use every core, and parallel runs make the per-point timings
+# meaningless. Raise it only if you do not care about the encode times.
+concurrency: 1
+
+# Keep the encoded files after the run (the VMAF logs are always kept).
+keep_encodes: false
+
+# One entry per codec configuration to compare. Each one is measured across
+# the whole grid, so two encoders double the run time.
+encoders:
+  - name: x264-vod
+    codec: libx264
+    preset: slow
+  # - name: svt-av1
+  #   codec: libsvtav1
+  #   preset: "6"
+  #   extra_args: ["-svtav1-params", "tune=0"]
+
+# The grid: which resolutions, and which bitrates (kbps) at each. Bracket the
+# range you might ship — the report will tell you if the curve was still
+# climbing at the top, or already flat at the bottom.
+rungs:
+  - height: 1080
+    bitrates: [2000, 3000, 4000, 5000, 6000]
+  - height: 720
+    bitrates: [1000, 1500, 2000, 3000]
+  - height: 480
+    bitrates: [500, 800, 1200]
+  - height: 360
+    bitrates: [300, 500, 800]
+
+vmaf:
+  # vmaf_v0.6.1 is the model for 1080p viewing on a TV-sized screen. For 4K
+  # content viewed on a 4K display use version=vmaf_4k_v0.6.1 instead.
+  model: version=vmaf_v0.6.1
+  n_threads: 0 # 0 = let libvmaf decide
+  n_subsample: 1 # score every Nth frame; 5 is much faster and still usable
+
+analysis:
+  # A rung is considered saturated when a +10% bitrate step buys less than
+  # this many VMAF points.
+  knee_gain: 0.5
+  # The quality the top rung aims at. ~93 is a common "looks right on a big
+  # screen" target; 95+ starts paying for bits few viewers can see.
+  target_vmaf: 93.0
+  # VMAF distance between two rungs of the recommended ladder. ~6 points is
+  # roughly one just-noticeable difference.
+  ladder_step: 6.0
+  # Keyframe interval used for every encode, in seconds. Match your segment
+  # duration: a benchmark with longer GOPs reports an efficiency you cannot
+  # ship.
+  gop_seconds: 2.0
+
+# Optional: the ladder you ship today. When set, the report says what each
+# rung actually delivers and what the same quality would cost on the frontier.
+current_ladder:
+  - height: 1080
+    bitrate: 5000
+  - height: 720
+    bitrate: 3000
+  - height: 480
+    bitrate: 1500
+  - height: 360
+    bitrate: 800

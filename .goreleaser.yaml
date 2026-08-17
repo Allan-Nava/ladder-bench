@@ -1,0 +1,40 @@
+version: 2
+
+project_name: ladder-bench
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: ladder-bench
+    main: ./cmd/ladder-bench
+    binary: ladder-bench
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  # CHANGELOG.md is written by hand, in Italian, and says why things changed.
+  # A generated commit list next to it would be noise.
+  disable: true
+
+release:
+  draft: false
+  prerelease: auto

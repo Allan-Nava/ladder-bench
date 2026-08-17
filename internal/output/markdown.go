@@ -1,0 +1,93 @@
+package output
+
+import (
+	"fmt"
+	"io"
+
+	"github.com/Allan-Nava/ladder-bench/internal/analysis"
+)
+
+// Markdown renders the report for a PR comment, a wiki page or a CI job
+// summary: same content as the text output, in tables.
+func Markdown(out io.Writer, r Report) error {
+	w := &errWriter{w: out}
+	fmt.Fprintf(w, "# ladder-bench report\n\n")
+	fmt.Fprintf(w, "- **Source**: `%s` — %s, %s, %s, %.1fs\n", r.Input,
+		geometry(r.Reference.Source.Width, r.Reference.Source.Height),
+		fps(r.Reference.Source.FrameRate), r.Reference.Source.Codec, r.Reference.Source.Duration)
+	fmt.Fprintf(w, "- **Reference clip**: `%s` — %s, %.1fs\n", r.Reference.Path,
+		geometry(r.Reference.Media.Width, r.Reference.Media.Height), r.Reference.Media.Duration)
+	fmt.Fprintf(w, "- **Measured**: %d points · target VMAF %.1f · ladder step %.1f\n", len(r.Results), r.Options.TargetVMAF, r.Options.LadderStep)
+	fmt.Fprintf(w, "- **Tool**: %s %s, %s\n", r.Tool, r.Version, r.Generated)
+
+	for _, a := range r.Analyses {
+		fmt.Fprintf(w, "\n## Encoder `%s`\n", a.Encoder)
+		fmt.Fprintf(w, "\n### Measurements\n\n")
+		fmt.Fprintln(w, "| Resolution | Target | Actual | VMAF | VMAF min | Gain per +10% |")
+		fmt.Fprintln(w, "|---|---:|---:|---:|---:|---:|")
+		for _, c := range a.Curves {
+			g := gains(c.Points)
+			for _, p := range c.Points {
+				gain := "—"
+				if v, ok := g[p.Target]; ok {
+					gain = fmt.Sprintf("%.2f", v)
+				}
+				fmt.Fprintf(w, "| %s | %dk | %s | %.2f | %.2f | %s |\n",
+					res(p.Height), p.Target, kbps(p.Kbps), p.VMAF, p.VMAFMin, gain)
+			}
+		}
+
+		fmt.Fprintf(w, "\n### Saturation\n\n")
+		for _, c := range a.Curves {
+			switch {
+			case c.StillClimbing:
+				fmt.Fprintf(w, "- **%s** — still climbing at the top of the grid; extend it upward.\n", res(c.Height))
+			case c.Knee == nil:
+				fmt.Fprintf(w, "- **%s** — not enough points to tell.\n", res(c.Height))
+			case c.FlatFromStart:
+				fmt.Fprintf(w, "- **%s** — already flat at %s, the cheapest point measured; extend the grid downward.\n",
+					res(c.Height), kbps(c.Knee.Kbps))
+			default:
+				fmt.Fprintf(w, "- **%s** — flattens at **%s** (VMAF %.1f): the top %.0f%% of this grid's bitrate buys nothing.\n",
+					res(c.Height), kbps(c.Knee.Kbps), c.Knee.VMAF, c.WastedPct)
+			}
+		}
+
+		fmt.Fprintf(w, "\n### Efficient frontier\n\n%s\n", frontier(a.Hull))
+
+		fmt.Fprintf(w, "\n### Recommended ladder\n\n")
+		if !a.TargetReached {
+			fmt.Fprintf(w, "> No measured point reached VMAF %.1f — the top rung is the best the grid could do.\n\n", r.Options.TargetVMAF)
+		}
+		fmt.Fprintln(w, "| Resolution | Bitrate | VMAF |")
+		fmt.Fprintln(w, "|---|---:|---:|")
+		for _, p := range a.Ladder {
+			fmt.Fprintf(w, "| %s | %s | %.2f |\n", res(p.Height), kbps(p.Kbps), p.VMAF)
+		}
+		fmt.Fprintf(w, "| **total** | **%s** | |\n", kbps(a.LadderTotalKbps))
+
+		writeMarkdownSavings(w, a)
+	}
+	return w.err
+}
+
+func writeMarkdownSavings(w io.Writer, a analysis.Result) {
+	if len(a.Savings) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\n### Versus the current ladder\n\n")
+	fmt.Fprintf(w, "Same quality as today, bought on the frontier — %d of %d rungs comparable:\n\n",
+		a.ComparedRungs, len(a.Savings))
+	fmt.Fprintf(w, "**%dk → %s (%s)**\n\n", a.CurrentTotalKbps, kbps(a.EfficientTotalKbps), pct(-a.TotalSavedPct))
+	fmt.Fprintln(w, "| Current rung | Delivers | Same quality costs | Change |")
+	fmt.Fprintln(w, "|---|---:|---|---:|")
+	for _, s := range a.Savings {
+		if s.Note != "" {
+			fmt.Fprintf(w, "| %s %dk | — | %s | — |\n", res(s.Current.Height), s.Current.Kbps, s.Note)
+			continue
+		}
+		fmt.Fprintf(w, "| %s %dk | VMAF %.2f | %s %s | %s |\n",
+			res(s.Current.Height), s.Current.Kbps, s.CurrentVMAF,
+			res(s.EfficientHeight), kbps(s.EfficientKbps), pct(-s.SavedPct))
+	}
+}
