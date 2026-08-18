@@ -18,6 +18,19 @@ clip:
   start: "60s"
   duration: "30s"
 
+# Or measure several cuts instead of one, and let the report say how far apart
+# they came out. A ladder chosen on thirty lucky seconds is a ladder chosen at
+# random, and the only way to find out whether they were lucky is to measure more
+# of them. Mutually exclusive with `clip:` above; every clip is measured across
+# the whole grid, so three clips triple the run.
+# clips:
+#   - start: "0s"
+#     duration: "30s"
+#   - start: "12m"
+#     duration: "30s"
+#   - start: "38m"
+#     duration: "30s"
+
 # How many encodes run at once. The default of 1 is deliberate: the encoders
 # already use every core, and parallel runs make the per-point timings
 # meaningless. Raise it only if you do not care about the encode times.

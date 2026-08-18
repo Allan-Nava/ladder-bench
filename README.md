@@ -160,6 +160,12 @@ that merely look precise.
   and SSIM in the same pass, for a fraction of its cost. All of it is reported,
   never acted on: VMAF alone drives every recommendation, because averaging two
   metrics into one score only hides which one you were trusting.
+- **One clip is one sample.** `clips:` measures the whole grid against several
+  cuts of the source and reports the VMAF spread between them. On a source built
+  from a flat colour, a detail pattern and pure noise, the same rung measured 97,
+  76 and 15 — an 82-point spread at one grid point. When the spread is wider than
+  the gap between rungs, the report says so: the clip choice mattered more than
+  the rung choice, and the answer is more content rather than more confidence.
 - **The report says what measured it** — the ffmpeg version line, every libvmaf
   that wrote one of the logs, and a fingerprint of the resolved config. Two
   reports with the same fingerprint measured the same experiment; two with

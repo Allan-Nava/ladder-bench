@@ -263,3 +263,65 @@ encoders:
 		t.Error("spelling out the defaults describes the same experiment, so the fingerprint must match")
 	}
 }
+
+// clips: is the multi-cut form, and setting both would leave it ambiguous which
+// one was measured while the report looked identical either way.
+func TestClipsAndClipAreExclusive(t *testing.T) {
+	grid := "input: in.mp4\nrungs:\n  - height: 720\n    bitrates: [1500, 3000]\n"
+	multi, err := Parse([]byte(grid + `clips:
+  - start: "0s"
+    duration: "30s"
+  - start: "5m"
+    duration: "30s"
+`))
+	if err != nil {
+		t.Fatalf("a clips list was rejected: %v", err)
+	}
+	if len(multi.Cuts()) != 2 || !multi.MultiClip() {
+		t.Errorf("Cuts() = %+v, MultiClip = %v", multi.Cuts(), multi.MultiClip())
+	}
+	// Two clips double the encodes, and the estimate has to say so.
+	if got, want := multi.Points(), 4; got != want {
+		t.Errorf("Points() = %d, want %d", got, want)
+	}
+
+	// The single-clip form still works and still reads as one cut.
+	single, err := Parse([]byte(grid + "clip:\n  start: \"1m\"\n  duration: \"30s\"\n"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(single.Cuts()) != 1 || single.MultiClip() {
+		t.Errorf("one clip should not read as multi: %+v", single.Cuts())
+	}
+	// So does neither, which means the whole source.
+	bare, err := Parse([]byte(grid))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(bare.Cuts()) != 1 {
+		t.Errorf("no clip at all is still one cut: %+v", bare.Cuts())
+	}
+
+	if _, err := Parse([]byte(grid + `clip:
+  start: "1m"
+  duration: "30s"
+clips:
+  - start: "0s"
+    duration: "30s"
+`)); err == nil {
+		t.Error("clip and clips together were accepted")
+	}
+	// The same seconds twice would halve the apparent dispersion of the point
+	// they both land on.
+	if _, err := Parse([]byte(grid + `clips:
+  - start: "0s"
+    duration: "30s"
+  - start: "0s"
+    duration: "30s"
+`)); err == nil {
+		t.Error("a duplicated cut was accepted")
+	}
+	if _, err := Parse([]byte(grid + "clips:\n  - start: \"-5s\"\n    duration: \"30s\"\n")); err == nil {
+		t.Error("a negative start was accepted")
+	}
+}

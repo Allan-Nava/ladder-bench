@@ -34,11 +34,11 @@ func sampleReport() Report {
 	return Report{
 		Tool: "ladder-bench", Version: "0.1.0", Generated: "2026-08-17T10:00:00Z",
 		Input: "source.mxf",
-		Reference: bench.Reference{
+		References: []bench.Reference{{
 			Path:   ".ladder-bench/reference_full_30s.mkv",
 			Media:  ffmpeg.Media{Width: 1920, Height: 1080, FrameRate: 25, Duration: 30},
 			Source: ffmpeg.Media{Width: 1920, Height: 1080, FrameRate: 25, Duration: 3600, Codec: "h264"},
-		},
+		}},
 		Options:  opt,
 		Results:  results,
 		Analyses: []analysis.Result{analysis.Analyze("x264", points, opt)},
@@ -241,6 +241,91 @@ func TestPercentileColumns(t *testing.T) {
 	}
 }
 
+// multiClipReport is a run over three cuts of the same source, where one cut
+// disagrees with the others by more than a whole rung.
+func multiClipReport() Report {
+	r := sampleReport()
+	var spread []analysis.Point
+	for _, c := range r.Analyses[0].Curves {
+		for i, p := range c.Points {
+			// The 3000k rung of each resolution is where the clips fall out.
+			p.Clips = 3
+			p.VMAFSpread = 1.2
+			if p.Target == 3000 {
+				p.VMAFSpread = 7.4
+			}
+			_ = i
+			spread = append(spread, p)
+		}
+	}
+	r.Analyses = []analysis.Result{analysis.Analyze("x264", spread, r.Options)}
+	r.References = []bench.Reference{
+		{Path: ".ladder-bench/reference_0s_30s.mkv", Clip: "0s_30s", Media: ffmpeg.Media{Width: 1920, Height: 1080, Duration: 30}},
+		{Path: ".ladder-bench/reference_5m_30s.mkv", Clip: "5m_30s", Media: ffmpeg.Media{Width: 1920, Height: 1080, Duration: 30}},
+		{Path: ".ladder-bench/reference_20m_30s.mkv", Clip: "20m_30s", Media: ffmpeg.Media{Width: 1920, Height: 1080, Duration: 30}},
+	}
+	return r
+}
+
+// A ladder is only as good as the content it was chosen on, so the report has to
+// admit when that content disagreed with itself.
+func TestReportShowsTheDispersionAcrossClips(t *testing.T) {
+	var text, md bytes.Buffer
+	if err := Text(&text, multiClipReport()); err != nil {
+		t.Fatalf("Text: %v", err)
+	}
+	if err := Markdown(&md, multiClipReport()); err != nil {
+		t.Fatalf("Markdown: %v", err)
+	}
+	for _, want := range []string{"across 3 clips", "SPREAD", "7.40", "wider than the 6.0 VMAF between rungs"} {
+		if !strings.Contains(text.String(), want) {
+			t.Errorf("text report is missing %q:\n%s", want, text.String())
+		}
+	}
+	for _, want := range []string{"### Across 3 clips", "Spread across clips", "7.40",
+		"wider than the 6.0 VMAF between rungs", "**Reference clips** (3):"} {
+		if !strings.Contains(md.String(), want) {
+			t.Errorf("markdown report is missing %q:\n%s", want, md.String())
+		}
+	}
+	// Every clip's reference is listed: a report that names one of three cuts
+	// cannot be matched back to what was measured.
+	for _, want := range []string{"reference_0s_30s.mkv", "reference_5m_30s.mkv", "reference_20m_30s.mkv"} {
+		if !strings.Contains(text.String(), want) {
+			t.Errorf("text report does not list %q", want)
+		}
+	}
+	if !strings.Contains(text.String(), "and 3 clips") {
+		t.Errorf("the header should say how many clips:\n%s", text.String())
+	}
+}
+
+// A single-clip run must not grow a dispersion section it has nothing to put in.
+func TestNoDispersionForOneClip(t *testing.T) {
+	var text, md bytes.Buffer
+	if err := Text(&text, sampleReport()); err != nil {
+		t.Fatalf("Text: %v", err)
+	}
+	if err := Markdown(&md, sampleReport()); err != nil {
+		t.Fatalf("Markdown: %v", err)
+	}
+	// "across" alone would match the header's "points across 1 encoder(s)", so
+	// the assertion is on the section heading and the column.
+	for _, unwanted := range []string{"SPREAD", "widest disagreement", " clips\n"} {
+		if strings.Contains(text.String(), unwanted) {
+			t.Errorf("one clip, yet the text report mentions %q:\n%s", unwanted, text.String())
+		}
+	}
+	if strings.Contains(md.String(), "Spread across clips") {
+		t.Error("one clip, yet the markdown report has a spread column")
+	}
+	// An empty bold label is what a naive "first entry keeps the name" loop
+	// renders for the second clip.
+	if strings.Contains(md.String(), "****") {
+		t.Errorf("empty label in the reference list:\n%s", md.String())
+	}
+}
+
 func TestTextReportShowsBDRate(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Text(&buf, challengerReport()); err != nil {
@@ -337,7 +422,7 @@ func TestJSONReportRoundTrips(t *testing.T) {
 	if err := json.Unmarshal(buf.Bytes(), &back); err != nil {
 		t.Fatalf("the JSON report is not valid JSON: %v", err)
 	}
-	for _, key := range []string{"tool", "version", "input", "reference", "results", "analysis", "options", "environment"} {
+	for _, key := range []string{"tool", "version", "input", "references", "results", "analysis", "options", "environment"} {
 		if _, ok := back[key]; !ok {
 			t.Errorf("JSON report is missing %q", key)
 		}

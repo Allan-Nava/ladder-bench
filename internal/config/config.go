@@ -79,7 +79,12 @@ type Config struct {
 	FFmpeg  string `yaml:"ffmpeg"`
 	FFprobe string `yaml:"ffprobe"`
 
-	Clip     Clip        `yaml:"clip"`
+	Clip Clip `yaml:"clip"`
+	// Clips measures several cuts of the same source instead of one. A ladder
+	// chosen on thirty lucky seconds is a ladder chosen at random, and the only
+	// way to know whether thirty seconds were lucky is to measure more of them.
+	// Mutually exclusive with Clip; use Cuts to read whichever was given.
+	Clips    []Clip      `yaml:"clips"`
 	Encoders []Encoder   `yaml:"encoders"`
 	Rungs    []Rung      `yaml:"rungs"`
 	VMAF     VMAF        `yaml:"vmaf"`
@@ -145,6 +150,19 @@ type Rendition struct {
 	Bitrate int `yaml:"bitrate"`
 }
 
+// Cuts is the list of clips to measure, whichever way the config spelled it.
+// Always at least one entry: an empty clip means the whole source.
+func (c *Config) Cuts() []Clip {
+	if len(c.Clips) > 0 {
+		return c.Clips
+	}
+	return []Clip{c.Clip}
+}
+
+// MultiClip reports whether this run measures more than one cut. It decides both
+// the file naming and whether the report has a dispersion to talk about.
+func (c *Config) MultiClip() bool { return len(c.Clips) > 1 }
+
 // Load reads, defaults and validates a config file.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
@@ -208,6 +226,24 @@ func (c *Config) Validate() error {
 	}
 	if c.Clip.Duration < 0 || c.Clip.Start < 0 {
 		return errors.New("clip: start and duration must not be negative")
+	}
+	// Both would leave it ambiguous which one was measured, and the report would
+	// look identical either way.
+	if len(c.Clips) > 0 && (c.Clip.Start != 0 || c.Clip.Duration != 0) {
+		return errors.New("clip and clips: set one or the other, not both")
+	}
+	seenCut := map[Clip]bool{}
+	for i, cut := range c.Clips {
+		if cut.Start < 0 || cut.Duration < 0 {
+			return fmt.Errorf("clips[%d]: start and duration must not be negative", i)
+		}
+		// Measuring the same seconds twice would halve the apparent dispersion
+		// of the point they both land on, which is the one number this exists
+		// to report.
+		if seenCut[cut] {
+			return fmt.Errorf("clips[%d]: the cut %s+%s is listed twice", i, cut.Start, cut.Duration)
+		}
+		seenCut[cut] = true
 	}
 	if len(c.Rungs) == 0 {
 		return errors.New("rungs: at least one resolution is required")
@@ -322,5 +358,5 @@ func (c *Config) Points() int {
 	for _, r := range c.Rungs {
 		n += len(r.Bitrates)
 	}
-	return n * len(c.Encoders)
+	return n * len(c.Encoders) * len(c.Cuts())
 }

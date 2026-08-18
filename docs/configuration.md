@@ -42,6 +42,46 @@ Durations are **quoted strings** (`30s`, `1m30s`). A bare number is rejected:
 parser. Omitting `duration` uses the whole source, which is rarely what you
 want — the clip is encoded once per grid point.
 
+## `clips`
+
+One clip answers "what does this ladder do to *these* thirty seconds". Several
+answer the question you actually have:
+
+```yaml
+clips:
+  - start: "0s"
+    duration: "30s"
+  - start: "12m"
+    duration: "30s"
+  - start: "38m"
+    duration: "30s"
+```
+
+`clips` and `clip` are **mutually exclusive** — setting both would leave it
+ambiguous which one was measured while the report looked identical either way —
+and the same cut twice is an error, because it would halve the apparent
+disagreement at every point the two land on.
+
+Every clip is measured across the **whole grid**, so three clips triple the run.
+In exchange the report gains a `SPREAD` column and an `across N clips` block: the
+VMAF distance between the best and worst clip at each point, and the widest of
+them. When that spread is wider than `ladder_step`, two cuts of your own source
+disagree about a rung by more than a whole rung — which means the ladder is an
+average of two different answers, and the honest next step is more content rather
+than more confidence.
+
+Everything downstream — the knee, the frontier, the recommended ladder, the
+BD-rate — is computed on the **aggregated** curve. Bitrates and VMAF are averaged
+across clips; `MIN`, `P5` and `P1` take the *worst* clip, because averaging tails
+would hide the cut that fell apart, which is the cut the extra clips were
+measured to find.
+
+**Adding a second clip re-measures the first.** Output files carry the clip in
+their name only when there is more than one, so a single-clip work dir keeps
+working across upgrades — and going multi-clip renames those files, which
+re-encodes them. That is the same rule as renaming an encoder: a run over three
+cuts is not the run over one that came before it.
+
 ## `encoders`
 
 ```yaml

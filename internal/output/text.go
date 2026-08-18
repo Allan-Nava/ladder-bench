@@ -13,13 +13,18 @@ import (
 func Text(out io.Writer, r Report) error {
 	w := &errWriter{w: out}
 	fmt.Fprintf(w, "%s %s — %s\n", r.Tool, r.Version, r.Generated)
+	src := primary(r.References).Source
 	fmt.Fprintf(w, "source     %s  %s  %s  %s  %.1fs\n", r.Input,
-		geometry(r.Reference.Source.Width, r.Reference.Source.Height),
-		fps(r.Reference.Source.FrameRate), r.Reference.Source.Codec, r.Reference.Source.Duration)
-	fmt.Fprintf(w, "reference  %s  %s  %.1fs%s\n", r.Reference.Path,
-		geometry(r.Reference.Media.Width, r.Reference.Media.Height),
-		r.Reference.Media.Duration, reusedNote(r.Reference.Reused))
-	fmt.Fprintf(w, "measured   %d points across %d encoder(s)\n", len(r.Results), len(r.Analyses))
+		geometry(src.Width, src.Height), fps(src.FrameRate), src.Codec, src.Duration)
+	for _, ref := range r.References {
+		fmt.Fprintf(w, "reference  %s  %s  %.1fs%s\n", ref.Path,
+			geometry(ref.Media.Width, ref.Media.Height), ref.Media.Duration, reusedNote(ref.Reused))
+	}
+	fmt.Fprintf(w, "measured   %d points across %d encoder(s)", len(r.Results), len(r.Analyses))
+	if len(r.References) > 1 {
+		fmt.Fprintf(w, " and %d clips", len(r.References))
+	}
+	fmt.Fprintln(w)
 	writeEnvironment(w, r.Env)
 
 	for _, a := range r.Analyses {
@@ -30,6 +35,7 @@ func Text(out io.Writer, r Report) error {
 			fmt.Fprintf(w, "encoder %s\n", a.Encoder)
 		}
 		writeCurves(w, a)
+		writeDispersion(w, a, r.Options)
 		writeSaturation(w, a)
 		writeFrontier(w, a, r.Options)
 		writeSavings(w, a)
@@ -88,6 +94,7 @@ func writeCurves(w io.Writer, a analysis.Result) {
 	// percentiles only when the log had a per-frame section to read.
 	psnr, ssim := measured(a, pointPSNR), measured(a, pointSSIM)
 	tails := measured(a, pointP1) || measured(a, pointP5)
+	clips := analysis.ClipCount(a) > 1
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	// VMAF, then the walk down into the tail: the harmonic mean, the two
 	// percentiles, the single worst frame.
@@ -96,6 +103,9 @@ func writeCurves(w io.Writer, a analysis.Result) {
 		head += "\tP5\tP1"
 	}
 	head += "\tMIN\tGAIN/+10%"
+	if clips {
+		head += "\tSPREAD"
+	}
 	if psnr {
 		head += "\tPSNR-Y"
 	}
@@ -116,6 +126,9 @@ func writeCurves(w io.Writer, a analysis.Result) {
 				row += "\t" + optional(p.P5, "%.2f") + "\t" + optional(p.P1, "%.2f")
 			}
 			row += fmt.Sprintf("\t%.2f\t%s", p.VMAFMin, gain)
+			if clips {
+				row += "\t" + spread(p)
+			}
 			if psnr {
 				row += "\t" + optional(p.PSNR, "%.2f")
 			}
@@ -126,6 +139,29 @@ func writeCurves(w io.Writer, a analysis.Result) {
 		}
 	}
 	_ = tw.Flush()
+}
+
+// writeDispersion says whether the clips agreed. A ladder is only as good as the
+// content it was chosen on, and this is the block that admits when that content
+// disagreed with itself.
+func writeDispersion(w io.Writer, a analysis.Result, opt analysis.Options) {
+	n := analysis.ClipCount(a)
+	if n < 2 {
+		return
+	}
+	worst, ok := analysis.WidestSpread(a)
+	if !ok {
+		return
+	}
+	fmt.Fprintf(w, "\n  across %d clips\n", n)
+	fmt.Fprintf(w, "    widest disagreement %.2f VMAF at %s %s\n", worst.VMAFSpread, res(worst.Height), kbps(worst.Kbps))
+	if worst.VMAFSpread >= opt.LadderStep {
+		// Wider than a rung: which clip you measured matters more than which
+		// rung you pick, so the ladder below is an average of two different
+		// answers rather than one answer.
+		fmt.Fprintf(w, "    ! that is wider than the %.1f VMAF between rungs — the clips disagree by more than a whole rung,\n", opt.LadderStep)
+		fmt.Fprintf(w, "      so measure more of the content before trusting the ladder to a single number\n")
+	}
 }
 
 func writeSaturation(w io.Writer, a analysis.Result) {

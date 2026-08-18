@@ -64,15 +64,19 @@ func runRun(ctx context.Context, args []string) error {
 	}
 	jobs := bench.Grid(cfg)
 	if !*quiet {
-		fmt.Fprintf(os.Stderr, "ladder-bench: %d points, %d encoder(s), concurrency %d\n",
-			len(jobs), len(cfg.Encoders), cfg.Concurrency)
+		fmt.Fprintf(os.Stderr, "ladder-bench: %d points, %d encoder(s), %d clip(s), concurrency %d\n",
+			len(jobs), len(cfg.Encoders), len(cfg.Cuts()), cfg.Concurrency)
 		b.Progress = func(done, total int, r bench.Result) {
 			note := fmt.Sprintf("encode %s", r.Encode.Round(100*time.Millisecond))
 			if r.Reused {
 				note = "reused"
 			}
-			fmt.Fprintf(os.Stderr, "[%2d/%2d] %-14s %5dp @ %6dk  VMAF %6.2f  (%s)\n",
-				done, total, r.Encoder, r.Height, r.Kbps, r.Score.Mean, note)
+			clip := ""
+			if r.Clip != "" {
+				clip = " " + r.Clip
+			}
+			fmt.Fprintf(os.Stderr, "[%2d/%2d] %-14s %5dp @ %6dk%s  VMAF %6.2f  (%s)\n",
+				done, total, r.Encoder, r.Height, r.Kbps, clip, r.Score.Mean, note)
 		}
 	}
 	if err := b.PrepareReference(ctx); err != nil {
@@ -92,16 +96,16 @@ func runRun(ctx context.Context, args []string) error {
 
 	analyses := analyze(cfg, results)
 	report := output.Report{
-		Tool:      "ladder-bench",
-		Version:   version,
-		Generated: time.Now().UTC().Format(time.RFC3339),
-		Input:     cfg.Input,
-		Reference: b.Ref,
-		Options:   options(cfg),
-		Results:   results,
-		Analyses:  analyses,
-		BDRates:   bdRates(cfg, analyses),
-		Env:       environment(ctx, cfg, tools, results),
+		Tool:       "ladder-bench",
+		Version:    version,
+		Generated:  time.Now().UTC().Format(time.RFC3339),
+		Input:      cfg.Input,
+		References: b.Refs,
+		Options:    options(cfg),
+		Results:    results,
+		Analyses:   analyses,
+		BDRates:    bdRates(cfg, analyses),
+		Env:        environment(ctx, cfg, tools, results),
 	}
 
 	w := os.Stdout
@@ -175,10 +179,17 @@ func bdRates(cfg *config.Config, analyses []analysis.Result) []analysis.Comparis
 
 // analyze runs the analysis once per encoder: a hull mixing two codecs would
 // recommend a ladder no single encoder can produce.
+//
+// Points measured on several clips are folded into one point per grid coordinate
+// first, so everything downstream reasons about a curve that covers all of the
+// measured content rather than about three curves it would have to reconcile.
 func analyze(cfg *config.Config, results []bench.Result) []analysis.Result {
 	byEncoder := map[string][]analysis.Point{}
 	for _, r := range results {
 		byEncoder[r.Encoder] = append(byEncoder[r.Encoder], r.Point())
+	}
+	for name, points := range byEncoder {
+		byEncoder[name] = analysis.Aggregate(points)
 	}
 	names := make([]string, 0, len(byEncoder))
 	for name := range byEncoder {

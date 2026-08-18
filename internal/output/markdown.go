@@ -13,11 +13,23 @@ import (
 func Markdown(out io.Writer, r Report) error {
 	w := &errWriter{w: out}
 	fmt.Fprintf(w, "# ladder-bench report\n\n")
+	src := primary(r.References).Source
 	fmt.Fprintf(w, "- **Source**: `%s` — %s, %s, %s, %.1fs\n", r.Input,
-		geometry(r.Reference.Source.Width, r.Reference.Source.Height),
-		fps(r.Reference.Source.FrameRate), r.Reference.Source.Codec, r.Reference.Source.Duration)
-	fmt.Fprintf(w, "- **Reference clip**: `%s` — %s, %.1fs\n", r.Reference.Path,
-		geometry(r.Reference.Media.Width, r.Reference.Media.Height), r.Reference.Media.Duration)
+		geometry(src.Width, src.Height), fps(src.FrameRate), src.Codec, src.Duration)
+	// One clip fits on the bullet; several become a nested list, because a
+	// second bullet with an empty label is not a list of clips, it is a bug that
+	// renders.
+	if len(r.References) == 1 {
+		ref := r.References[0]
+		fmt.Fprintf(w, "- **Reference clip**: `%s` — %s, %.1fs\n", ref.Path,
+			geometry(ref.Media.Width, ref.Media.Height), ref.Media.Duration)
+	} else if len(r.References) > 1 {
+		fmt.Fprintf(w, "- **Reference clips** (%d):\n", len(r.References))
+		for _, ref := range r.References {
+			fmt.Fprintf(w, "  - `%s` — %s, %.1fs\n", ref.Path,
+				geometry(ref.Media.Width, ref.Media.Height), ref.Media.Duration)
+		}
+	}
 	fmt.Fprintf(w, "- **Measured**: %d points · target VMAF %.1f · ladder step %.1f\n", len(r.Results), r.Options.TargetVMAF, r.Options.LadderStep)
 	fmt.Fprintf(w, "- **Tool**: %s %s, %s\n", r.Tool, r.Version, r.Generated)
 	if r.Env.FFmpeg != "" {
@@ -37,6 +49,7 @@ func Markdown(out io.Writer, r Report) error {
 		fmt.Fprintf(w, "\n## Encoder `%s`\n", a.Encoder)
 		psnr, ssim := measured(a, pointPSNR), measured(a, pointSSIM)
 		tails := measured(a, pointP1) || measured(a, pointP5)
+		clips := analysis.ClipCount(a) > 1
 		fmt.Fprintf(w, "\n### Measurements\n\n")
 		head := "| Resolution | Target | Actual | VMAF | VMAF harmonic |"
 		rule := "|---|---:|---:|---:|---:|"
@@ -45,6 +58,9 @@ func Markdown(out io.Writer, r Report) error {
 		}
 		head += " VMAF min | Gain per +10% |"
 		rule += "---:|---:|"
+		if clips {
+			head, rule = head+" Spread across clips |", rule+"---:|"
+		}
 		if psnr {
 			head, rule = head+" PSNR-Y |", rule+"---:|"
 		}
@@ -66,6 +82,9 @@ func Markdown(out io.Writer, r Report) error {
 					row += " " + optional(p.P5, "%.2f") + " | " + optional(p.P1, "%.2f") + " |"
 				}
 				row += fmt.Sprintf(" %.2f | %s |", p.VMAFMin, gain)
+				if clips {
+					row += " " + spread(p) + " |"
+				}
 				if psnr {
 					row += " " + optional(p.PSNR, "%.2f") + " |"
 				}
@@ -73,6 +92,18 @@ func Markdown(out io.Writer, r Report) error {
 					row += " " + optional(p.SSIM, "%.4f") + " |"
 				}
 				fmt.Fprintln(w, row)
+			}
+		}
+
+		if n := analysis.ClipCount(a); n > 1 {
+			if worst, ok := analysis.WidestSpread(a); ok {
+				fmt.Fprintf(w, "\n### Across %d clips\n\n", n)
+				fmt.Fprintf(w, "Widest disagreement between clips: **%.2f VMAF** at %s %s.\n",
+					worst.VMAFSpread, res(worst.Height), kbps(worst.Kbps))
+				if worst.VMAFSpread >= r.Options.LadderStep {
+					fmt.Fprintf(w, "\n> That is wider than the %.1f VMAF between rungs: the clips disagree by more than a whole rung, so measure more of the content before trusting the ladder to a single number.\n",
+						r.Options.LadderStep)
+				}
 			}
 		}
 

@@ -28,8 +28,14 @@ type Job struct {
 	Extra   []string `json:"extra_args,omitempty"`
 	Height  int      `json:"height"`
 	Kbps    int      `json:"target_kbps"`
-	Out     string   `json:"out"`
-	Log     string   `json:"vmaf_log"`
+	// Clip is which cut of the source this point was measured on, named the way
+	// its reference file is (`0s_30s`). Empty for a single-clip run, so those
+	// runs keep the report they always had.
+	Clip string `json:"clip,omitempty"`
+	// Cut is the clip itself, so measure can find the right reference.
+	Cut config.Clip `json:"-"`
+	Out string      `json:"out"`
+	Log string      `json:"vmaf_log"`
 }
 
 // Result is one measured point.
@@ -63,9 +69,12 @@ func (r Result) Point() analysis.Point {
 	}
 }
 
-// Reference is the clip every encode is made from and compared against.
+// Reference is a clip encodes are made from and compared against. A run has one
+// per cut of the source.
 type Reference struct {
-	Path  string       `json:"path"`
+	Path string `json:"path"`
+	// Clip names the cut, matching Job.Clip. Empty for a single-clip run.
+	Clip  string       `json:"clip,omitempty"`
 	Media ffmpeg.Media `json:"media"`
 	// Source is what the clip was cut out of.
 	Source ffmpeg.Media `json:"source"`
@@ -84,7 +93,8 @@ type Bench struct {
 	FFmpeg string
 	Prober Prober
 	Exec   ffmpeg.Executor
-	Ref    Reference
+	// Refs holds one prepared reference per cut, in config order.
+	Refs []Reference
 	// Force re-encodes points whose files are already on disk.
 	Force bool
 	// Progress, when set, is called once per finished point.
@@ -99,26 +109,48 @@ func Grid(cfg *config.Config) []Job {
 	var jobs []Job
 	rungs := append([]config.Rung(nil), cfg.Rungs...)
 	sort.SliceStable(rungs, func(i, j int) bool { return rungs[i].Height > rungs[j].Height })
+	multi := cfg.MultiClip()
 	for _, enc := range cfg.Encoders {
-		for _, rung := range rungs {
-			rates := append([]int(nil), rung.Bitrates...)
-			sort.Ints(rates)
-			for _, kbps := range rates {
-				base := filepath.Join(cfg.WorkDir, fmt.Sprintf("%s_%dp_%dk", slug(enc.Name), rung.Height, kbps))
-				jobs = append(jobs, Job{
-					Encoder: enc.Name,
-					Codec:   enc.Codec,
-					Preset:  enc.Preset,
-					Extra:   enc.ExtraArgs,
-					Height:  rung.Height,
-					Kbps:    kbps,
-					Out:     base + ".mp4",
-					Log:     base + ".vmaf.json",
-				})
+		for _, cut := range cfg.Cuts() {
+			// The clip goes in the file name only when there is more than one.
+			// A single-clip run therefore keeps the names it has always used and
+			// its work dir stays valid; adding a second clip renames the first
+			// one's files, which re-measures them — correctly, because a run over
+			// three cuts is not the run over one that came before it.
+			clip := ""
+			part := ""
+			if multi {
+				clip = ClipName(cut)
+				part = clip + "_"
+			}
+			for _, rung := range rungs {
+				rates := append([]int(nil), rung.Bitrates...)
+				sort.Ints(rates)
+				for _, kbps := range rates {
+					base := filepath.Join(cfg.WorkDir, fmt.Sprintf("%s_%s%dp_%dk", slug(enc.Name), part, rung.Height, kbps))
+					jobs = append(jobs, Job{
+						Encoder: enc.Name,
+						Codec:   enc.Codec,
+						Preset:  enc.Preset,
+						Extra:   enc.ExtraArgs,
+						Height:  rung.Height,
+						Kbps:    kbps,
+						Clip:    clip,
+						Cut:     cut,
+						Out:     base + ".mp4",
+						Log:     base + ".vmaf.json",
+					})
+				}
 			}
 		}
 	}
 	return jobs
+}
+
+// ClipName identifies a cut the same way its reference file does, so a name in
+// the report and a file on disk can always be matched up by eye.
+func ClipName(cut config.Clip) string {
+	return fmt.Sprintf("%s_%s", compactDuration(cut.Start.D()), compactDuration(cut.Duration.D()))
 }
 
 // ReferencePath is where the reference clip of this config lives.
@@ -127,12 +159,17 @@ func Grid(cfg *config.Config) []Job {
 // different file instead of silently reusing the previous run's clip — the
 // kind of stale input that makes a whole run's numbers wrong without anything
 // looking broken. `plan` and `run` must agree on this, hence one function.
-func ReferencePath(cfg *config.Config) string {
-	return filepath.Join(cfg.WorkDir, fmt.Sprintf("reference_%s_%s.mkv",
-		compactDuration(cfg.Clip.Start.D()), compactDuration(cfg.Clip.Duration.D())))
+func ReferencePath(cfg *config.Config, cut config.Clip) string {
+	return filepath.Join(cfg.WorkDir, "reference_"+ClipName(cut)+".mkv")
 }
 
-// PrepareReference probes the source, cuts the reference clip and probes it.
+// PrepareReference probes the source and cuts every reference clip the config
+// asks for, probing each one.
+//
+// The clips are cut before anything is encoded, and each is probed rather than
+// assumed: the geometry decides the VMAF scaling and the duration turns bytes
+// into a bitrate, so a clip that came out different from what was asked would
+// quietly change every number measured against it.
 func (b *Bench) PrepareReference(ctx context.Context) error {
 	src, err := b.Prober.Probe(ctx, b.Cfg.Input)
 	if err != nil {
@@ -141,27 +178,46 @@ func (b *Bench) PrepareReference(ctx context.Context) error {
 	if err := os.MkdirAll(b.Cfg.WorkDir, 0o755); err != nil {
 		return err
 	}
-	path := ReferencePath(b.Cfg)
-	reused := false
-	if _, err := os.Stat(path); err == nil && !b.Force {
-		reused = true
-	} else {
-		args := ffmpeg.ReferenceArgs(b.Cfg.Input, path, b.Cfg.Clip.Start.D(), b.Cfg.Clip.Duration.D())
-		if err := b.Exec.Run(ctx, b.FFmpeg, args); err != nil {
-			return fmt.Errorf("cutting the reference clip: %w", err)
+	multi := b.Cfg.MultiClip()
+	b.Refs = nil
+	for _, cut := range b.Cfg.Cuts() {
+		path := ReferencePath(b.Cfg, cut)
+		reused := false
+		if _, err := os.Stat(path); err == nil && !b.Force {
+			reused = true
+		} else {
+			args := ffmpeg.ReferenceArgs(b.Cfg.Input, path, cut.Start.D(), cut.Duration.D())
+			if err := b.Exec.Run(ctx, b.FFmpeg, args); err != nil {
+				return fmt.Errorf("cutting the reference clip %s: %w", ClipName(cut), err)
+			}
+		}
+		ref, err := b.Prober.Probe(ctx, path)
+		if err != nil {
+			return fmt.Errorf("probing the reference clip %s: %w", ClipName(cut), err)
+		}
+		name := ""
+		if multi {
+			name = ClipName(cut)
+		}
+		b.Refs = append(b.Refs, Reference{Path: path, Clip: name, Media: ref, Source: src, Reused: reused})
+	}
+	return nil
+}
+
+// reference finds the prepared clip a job was measured against.
+func (b *Bench) reference(job Job) (Reference, error) {
+	want := ReferencePath(b.Cfg, job.Cut)
+	for _, r := range b.Refs {
+		if r.Path == want {
+			return r, nil
 		}
 	}
-	ref, err := b.Prober.Probe(ctx, path)
-	if err != nil {
-		return fmt.Errorf("probing the reference clip: %w", err)
-	}
-	b.Ref = Reference{Path: path, Media: ref, Source: src, Reused: reused}
-	return nil
+	return Reference{}, fmt.Errorf("reference clip %s not prepared", ClipName(job.Cut))
 }
 
 // Run measures every job, honouring the configured concurrency.
 func (b *Bench) Run(ctx context.Context, jobs []Job) ([]Result, error) {
-	if b.Ref.Path == "" {
+	if len(b.Refs) == 0 {
 		return nil, fmt.Errorf("reference clip not prepared")
 	}
 	ctx, cancel := context.WithCancel(ctx)
@@ -235,6 +291,10 @@ func (b *Bench) logCovers(path string) bool {
 
 func (b *Bench) measure(ctx context.Context, job Job) (Result, error) {
 	res := Result{Job: job}
+	ref, err := b.reference(job)
+	if err != nil {
+		return res, err
+	}
 	fresh := b.Force || !exists(job.Out) || !exists(job.Log)
 	// A log written before `vmaf.metrics` asked for PSNR or SSIM does not
 	// contain them, and no amount of re-reading will add them. Reusing it would
@@ -245,10 +305,10 @@ func (b *Bench) measure(ctx context.Context, job Job) (Result, error) {
 		fresh = true
 	}
 	if fresh {
-		gop := int(math.Round(b.Ref.Media.FrameRate * b.Cfg.Analysis.GOPSeconds))
+		gop := int(math.Round(ref.Media.FrameRate * b.Cfg.Analysis.GOPSeconds))
 		start := time.Now()
 		encodeArgs := ffmpeg.EncodeArgs(ffmpeg.EncodeSpec{
-			Reference: b.Ref.Path,
+			Reference: ref.Path,
 			Out:       job.Out,
 			Height:    job.Height,
 			Kbps:      job.Kbps,
@@ -265,10 +325,10 @@ func (b *Bench) measure(ctx context.Context, job Job) (Result, error) {
 		start = time.Now()
 		vmafArgs := ffmpeg.VMAFArgs(ffmpeg.VMAFSpec{
 			Distorted: job.Out,
-			Reference: b.Ref.Path,
+			Reference: ref.Path,
 			LogPath:   job.Log,
-			Width:     b.Ref.Media.Width,
-			Height:    b.Ref.Media.Height,
+			Width:     ref.Media.Width,
+			Height:    ref.Media.Height,
 			Model:     b.Cfg.VMAF.Model,
 			Threads:   b.Cfg.VMAF.Threads,
 			Subsample: b.Cfg.VMAF.Subsample,
@@ -299,7 +359,7 @@ func (b *Bench) measure(ctx context.Context, job Job) (Result, error) {
 	res.Bytes = info.Size()
 	// Video-only files over a known duration: size is the honest bitrate,
 	// including the container overhead the CDN also has to ship.
-	if d := b.Ref.Media.Duration; d > 0 {
+	if d := ref.Media.Duration; d > 0 {
 		res.ActualKbps = float64(info.Size()) * 8 / d / 1000
 	}
 	return res, nil

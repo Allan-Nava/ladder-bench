@@ -126,7 +126,7 @@ A point is reused when both its encode and its VMAF log are already on disk, so
 an interrupted grid picks up where it stopped and re-rendering the same
 measurements in another format costs nothing.
 
-Three consequences worth knowing before trusting a cached work dir:
+Four consequences worth knowing before trusting a cached work dir:
 
 - **Renaming an encoder invalidates its points**, because the output files are
   named after it. Changing a preset **without** renaming does *not* — use
@@ -134,6 +134,10 @@ Three consequences worth knowing before trusting a cached work dir:
 - **Changing `clip:` is safe.** The reference file name carries the cut
   (`reference_60s_30s.mkv`), so a new cut is a new file rather than a silent
   reuse of the old one.
+- **Adding a second clip re-measures the first.** The clip appears in the file
+  names only when there is more than one, so a single-clip work dir survives
+  every upgrade — and going multi-clip renames those files, which re-encodes
+  them. Same rule as renaming an encoder.
 - **Adding to [`vmaf.metrics`](configuration.md#vmaf) re-measures by itself**,
   without `--force`. A log written before PSNR was asked for does not contain it
   and never will, so those points are encoded and measured again. Nothing is
@@ -145,8 +149,8 @@ Three consequences worth knowing before trusting a cached work dir:
 
 | File | Kept after a run | What it is |
 |---|---|---|
-| `reference_<start>_<duration>.mkv` | yes | The lossless reference clip, cut once and used by every encode and every comparison. |
-| `<encoder>_<height>p_<kbps>k.mp4` | only with `keep_encodes: true` | One grid point's encode. These are the bulk of the disk. |
+| `reference_<start>_<duration>.mkv` | yes | A lossless reference clip, cut once and used by every encode and every comparison against it. One per entry in [`clips:`](configuration.md#clips). |
+| `<encoder>_<height>p_<kbps>k.mp4` | only with `keep_encodes: true` | One grid point's encode. These are the bulk of the disk. With several clips the name becomes `<encoder>_<clip>_<height>p_<kbps>k.mp4`. |
 | `<encoder>_<height>p_<kbps>k.vmaf.json` | yes | The libvmaf log — the measurement itself, which is why it survives the cleanup. |
 
 ### Interrupting a run

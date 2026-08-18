@@ -14,14 +14,16 @@ import (
 
 // Report is everything a run produced.
 type Report struct {
-	Tool      string            `json:"tool"`
-	Version   string            `json:"version"`
-	Generated string            `json:"generated"`
-	Input     string            `json:"input"`
-	Reference bench.Reference   `json:"reference"`
-	Options   analysis.Options  `json:"options"`
-	Results   []bench.Result    `json:"results"`
-	Analyses  []analysis.Result `json:"analysis"`
+	Tool      string `json:"tool"`
+	Version   string `json:"version"`
+	Generated string `json:"generated"`
+	Input     string `json:"input"`
+	// References is one entry per cut of the source. A single-clip run has one,
+	// which is the shape every run had before `clips:` existed.
+	References []bench.Reference `json:"references"`
+	Options    analysis.Options  `json:"options"`
+	Results    []bench.Result    `json:"results"`
+	Analyses   []analysis.Result `json:"analysis"`
 	// BDRates compares every other encoder against the anchor. Empty when the
 	// run measured a single encoder: there is nothing to compare it to.
 	BDRates []analysis.Comparison `json:"bd_rates,omitempty"`
@@ -116,6 +118,23 @@ func fps(v float64) string {
 }
 
 func geometry(w, h int) string { return fmt.Sprintf("%dx%d", w, h) }
+
+// primary is the reference a report's header describes when it has to pick one:
+// the source geometry is the same for every cut, so the first will do.
+func primary(refs []bench.Reference) bench.Reference {
+	if len(refs) == 0 {
+		return bench.Reference{}
+	}
+	return refs[0]
+}
+
+// spread renders a VMAF dispersion, or a dash for a point measured on one clip.
+func spread(p analysis.Point) string {
+	if p.Clips < 2 {
+		return "—"
+	}
+	return fmt.Sprintf("%.2f", p.VMAFSpread)
+}
 
 // gains maps each point of a curve to the quality its step bought, so the
 // table can show where the curve went flat instead of making the reader

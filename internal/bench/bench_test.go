@@ -159,9 +159,9 @@ func TestGridIsOrderedAndNamed(t *testing.T) {
 // previous run's reference.
 func TestReferencePathCarriesTheCut(t *testing.T) {
 	cfg := testConfig(t)
-	first := ReferencePath(cfg)
+	first := ReferencePath(cfg, cfg.Clip)
 	cfg.Clip.Start = config.Duration(60e9)
-	if second := ReferencePath(cfg); second == first {
+	if second := ReferencePath(cfg, cfg.Clip); second == first {
 		t.Errorf("changing the cut must change the reference path, both were %q", first)
 	}
 }
@@ -181,8 +181,8 @@ func TestRunMeasuresEveryPoint(t *testing.T) {
 	if err := b.PrepareReference(context.Background()); err != nil {
 		t.Fatalf("PrepareReference: %v", err)
 	}
-	if b.Ref.Media.Width != 1920 {
-		t.Errorf("reference geometry not probed: %+v", b.Ref)
+	if b.Refs[0].Media.Width != 1920 {
+		t.Errorf("reference geometry not probed: %+v", b.Refs)
 	}
 	jobs := Grid(cfg)
 	results, err := b.Run(context.Background(), jobs)
@@ -236,7 +236,7 @@ func TestRunReusesFinishedPoints(t *testing.T) {
 	if err := b2.PrepareReference(ctx); err != nil {
 		t.Fatalf("second PrepareReference: %v", err)
 	}
-	if !b2.Ref.Reused {
+	if !b2.Refs[0].Reused {
 		t.Error("the reference clip should have been reused")
 	}
 	results, err := b2.Run(ctx, jobs)
@@ -385,6 +385,86 @@ func TestRunReMeasuresLogsMissingTheRequestedMetrics(t *testing.T) {
 		if r.Score.PSNR == nil {
 			t.Errorf("%s lost its PSNR on reuse", r.Out)
 		}
+	}
+}
+
+// A multi-clip config cuts one reference per clip and measures the whole grid
+// against each of them.
+func TestGridAndReferencesCoverEveryClip(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.Clip = config.Clip{}
+	cfg.Clips = []config.Clip{
+		{Start: config.Duration(0), Duration: config.Duration(10e9)},
+		{Start: config.Duration(60e9), Duration: config.Duration(10e9)},
+	}
+	if got, want := cfg.Points(), 6; got != want {
+		t.Errorf("Points() = %d, want %d (3 grid points x 2 clips)", got, want)
+	}
+	jobs := Grid(cfg)
+	if len(jobs) != 6 {
+		t.Fatalf("got %d jobs, want 6", len(jobs))
+	}
+	// The clip is in the file name, or two clips would overwrite each other's
+	// encodes and the second would silently reuse the first's measurement.
+	names := map[string]bool{}
+	clips := map[string]int{}
+	for _, j := range jobs {
+		if names[j.Out] {
+			t.Fatalf("two jobs share the output file %q", j.Out)
+		}
+		names[j.Out] = true
+		if j.Clip == "" {
+			t.Errorf("a multi-clip job must name its clip: %+v", j)
+		}
+		if !strings.Contains(filepath.Base(j.Out), j.Clip) {
+			t.Errorf("output %q does not carry the clip %q", filepath.Base(j.Out), j.Clip)
+		}
+		clips[j.Clip]++
+	}
+	if len(clips) != 2 {
+		t.Errorf("jobs cover %d clips, want 2: %v", len(clips), clips)
+	}
+
+	exec := &fakeExec{}
+	b := newBench(t, cfg, exec)
+	ctx := context.Background()
+	if err := b.PrepareReference(ctx); err != nil {
+		t.Fatalf("PrepareReference: %v", err)
+	}
+	if len(b.Refs) != 2 {
+		t.Fatalf("prepared %d references, want 2", len(b.Refs))
+	}
+	if b.Refs[0].Path == b.Refs[1].Path {
+		t.Errorf("both clips landed on the same reference file %q", b.Refs[0].Path)
+	}
+	results, err := b.Run(ctx, jobs)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, r := range results {
+		if r.Score.Mean == 0 {
+			t.Errorf("%s has no score", r.Out)
+		}
+	}
+	// Two cuts plus an encode and a measurement per point.
+	if want := 2 + 2*len(jobs); exec.count() != want {
+		t.Errorf("ran %d commands, want %d", exec.count(), want)
+	}
+}
+
+// A single-clip config keeps the file names it has always used, so an existing
+// work dir stays valid across the upgrade that introduced `clips:`.
+func TestSingleClipNamesAreUnchanged(t *testing.T) {
+	cfg := testConfig(t)
+	jobs := Grid(cfg)
+	if got := filepath.Base(jobs[0].Out); got != "x264-slow_1080p_4000k.mp4" {
+		t.Errorf("output name = %q, want the pre-clips name", got)
+	}
+	if jobs[0].Clip != "" {
+		t.Errorf("a single-clip job must not name a clip, got %q", jobs[0].Clip)
+	}
+	if got := filepath.Base(ReferencePath(cfg, cfg.Clip)); got != "reference_full_10s.mkv" {
+		t.Errorf("reference name = %q", got)
 	}
 }
 

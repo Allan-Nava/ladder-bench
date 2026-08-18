@@ -2,6 +2,41 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/it/1.1.0/), versioni [SemVer](https://semver.org/lang/it/).
 
+## 0.6.0
+
+M2 chiusa: il risultato è difendibile.
+
+### Aggiunto
+
+- **Più clip di riferimento (LB-10).** `clips:` misura **tutta la griglia** contro più tagli dello stesso sorgente e riporta quanto sono venuti distanti:
+
+  ```yaml
+  clips:
+    - start: "0s"
+      duration: "30s"
+    - start: "12m"
+      duration: "30s"
+    - start: "38m"
+      duration: "30s"
+  ```
+
+  Serve perché una ladder scelta su trenta secondi fortunati è una ladder scelta a caso, e l'unico modo di sapere se erano fortunati è misurarne altri. Il report guadagna una colonna `SPREAD` — la distanza VMAF fra il clip migliore e il peggiore in quel punto — e un blocco `across N clips` con la disagreement più larga. Quando lo spread supera `ladder_step`, due tagli del **tuo** sorgente non sono d'accordo su un rung per più di un rung intero: la ladder consigliata è la media di due risposte diverse, e la mossa onesta è misurare più contenuto invece di fidarsi più forte del numero.
+
+  Le scelte:
+  - **tutto a valle gira sulla curva aggregata** (ginocchio, frontiera, ladder, BD-rate): un run su tre tagli è una risposta diversa e migliore, non tre curve da riconciliare;
+  - **medie per ciò da cui si disegna una curva, minimi per ciò che descrive una coda**. Bitrate e VMAF si mediano; `MIN`, `P5` e `P1` prendono il clip **peggiore**, perché mediare le code nasconderebbe il taglio che è andato a pezzi — che è esattamente il taglio per cui si misurano più clip;
+  - **le misure per clip non si buttano**: `results[]` resta per-clip e `analysis[]` è l'aggregato, così uno spread si può sempre risalire a quale taglio ha prodotto quale estremo;
+  - **`clip:` e `clips:` sono mutuamente esclusivi**, e lo stesso taglio due volte è un errore: dimezzerebbe la dispersione apparente del punto su cui cadono entrambi.
+
+  Verificato su un sorgente costruito con tre tagli deliberatamente diversi — colore piatto, pattern di dettaglio, rumore puro: lo stesso rung 720p misura VMAF 97, 76 e 15, cioè **81.95 VMAF di spread in un punto solo**, e l'avviso scatta. Un clip solo avrebbe riportato quello che gli capitava, senza un accenno all'esistenza degli altri due.
+
+### Modificato
+
+- **`references` al posto di `reference` nel JSON**, come lista: un run ha un clip di riferimento per taglio. Un run a clip singolo ha una lista da un elemento, che è la forma che aveva prima.
+- **I nomi dei file portano il clip solo quando ce n'è più di uno**, quindi una work dir a clip singolo continua a valere dopo l'aggiornamento; passare a più clip rinomina quei file e li rimisura. È la stessa regola del rinominare un encoder: un run su tre tagli non è il run su uno che c'era prima.
+- **La stima di disco di `plan` misura ogni job sulla durata del *suo* clip.** Prima leggeva `clip.duration`, che con `clips:` è zero: la stima diventava "unknown" proprio sul run che ne ha più bisogno.
+- **`plan` stampa un taglio per clip** e marca ogni encode col clip a cui appartiene, altrimenti i comandi non si possono associare a niente.
+
 ## 0.5.0
 
 ### Aggiunto

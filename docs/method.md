@@ -36,6 +36,13 @@ The clip's file name carries the cut (`reference_60s_30s.mkv`), so changing
 makes every rung look brilliant; 30–60 seconds of the busiest content you
 actually ship is the useful choice. The clip is paid once per grid point.
 
+**Better still, pick several.** [`clips:`](configuration.md#clips) measures the
+whole grid against each of them and reports how far apart they came out. On a
+synthetic source built from three deliberately different cuts — flat colour,
+detail, pure noise — the same 720p rung measured VMAF 97, 76 and 15: a spread of
+**82 VMAF at one grid point**. A single clip would have reported whichever of
+those three it happened to be, with no hint that the other two existed.
+
 ## 2. The encodes
 
 ```
@@ -144,6 +151,15 @@ by `ladder_step` VMAF (~6, roughly one just-noticeable difference). Equal
 bitrate steps instead pile up indistinguishable rungs at the top and leave a
 cliff at the bottom. The top rung is the *cheapest* point reaching
 `target_vmaf`, not the best point measured.
+
+**Across clips.** Points measured on several cuts are folded into one point per
+grid coordinate before any of the above runs, so the knee, the frontier and the
+ladder describe all of the measured content rather than three curves that would
+have to be reconciled. Bitrate and VMAF are averaged; `MIN`, `P5` and `P1` take
+the worst clip, because averaging tails hides the cut that fell apart. The
+dispersion is reported rather than folded away: when the spread at a point
+exceeds `ladder_step`, the report says that the clip choice mattered more than
+the rung choice.
 
 **Versus your current ladder.** For each configured rung: the quality it
 delivers today (interpolated within its own resolution's measured curve), and

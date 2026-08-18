@@ -26,6 +26,11 @@ type Point struct {
 	// of the clip, which every average is designed to absorb.
 	P1 *float64 `json:"vmaf_p1,omitempty"`
 	P5 *float64 `json:"vmaf_p5,omitempty"`
+	// Clips is how many cuts of the source this point averages, and VMAFSpread
+	// the VMAF distance between the best and worst of them. Both are zero for a
+	// run over a single clip, where there is no dispersion to report.
+	Clips      int     `json:"clips,omitempty"`
+	VMAFSpread float64 `json:"vmaf_spread,omitempty"`
 	// PSNR (Y plane, dB) and SSIM are nil unless the run asked for them. A zero
 	// could not say "not measured", and absent is not the same as terrible.
 	PSNR *float64 `json:"psnr_y,omitempty"`

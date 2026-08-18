@@ -34,7 +34,6 @@ func runPlan(ctx context.Context, args []string) error {
 
 	w := os.Stdout
 	jobs := bench.Grid(cfg)
-	refPath := bench.ReferencePath(cfg)
 
 	// The reference geometry decides the VMAF scaling, so probe when we can
 	// and say so loudly when we cannot: a plan printed with assumed geometry
@@ -59,19 +58,30 @@ func runPlan(ctx context.Context, args []string) error {
 		fmt.Fprintf(w, "# ASSUMED reference geometry %dx%d @ %.0f fps — the real run probes the clip\n", refW, refH, fps)
 	}
 
-	fmt.Fprintf(w, "# %d points, %d encoder(s), concurrency %d\n", len(jobs), len(cfg.Encoders), cfg.Concurrency)
+	fmt.Fprintf(w, "# %d points, %d encoder(s), %d clip(s), concurrency %d\n",
+		len(jobs), len(cfg.Encoders), len(cfg.Cuts()), cfg.Concurrency)
 	fmt.Fprintf(w, "# encodes on disk: roughly %s (plus the lossless reference clip)\n", humanBytes(estimateBytes(cfg, jobs)))
 
 	ffmpegBin := "ffmpeg"
 	if toolErr == nil {
 		ffmpegBin = tools.FFmpeg
 	}
-	fmt.Fprintln(w, "\n# reference clip")
-	fmt.Fprintln(w, ffmpeg.Quote(ffmpegBin, ffmpeg.ReferenceArgs(cfg.Input, refPath, cfg.Clip.Start.D(), cfg.Clip.Duration.D())))
+	// One cut per clip, each printed with the command that produces it: with
+	// several clips the plan has to show which seconds each reference covers, or
+	// the encodes below cannot be matched to anything.
+	fmt.Fprintf(w, "\n# reference clip(s)\n")
+	for _, cut := range cfg.Cuts() {
+		fmt.Fprintln(w, ffmpeg.Quote(ffmpegBin, ffmpeg.ReferenceArgs(cfg.Input, bench.ReferencePath(cfg, cut), cut.Start.D(), cut.Duration.D())))
+	}
 
 	gop := int(math.Round(fps * cfg.Analysis.GOPSeconds))
 	for _, job := range jobs {
-		fmt.Fprintf(w, "\n# %s — %dp @ %dk\n", job.Encoder, job.Height, job.Kbps)
+		refPath := bench.ReferencePath(cfg, job.Cut)
+		clip := ""
+		if job.Clip != "" {
+			clip = " (clip " + job.Clip + ")"
+		}
+		fmt.Fprintf(w, "\n# %s — %dp @ %dk%s\n", job.Encoder, job.Height, job.Kbps, clip)
 		fmt.Fprintln(w, ffmpeg.Quote(ffmpegBin, ffmpeg.EncodeArgs(ffmpeg.EncodeSpec{
 			Reference: refPath,
 			Out:       job.Out,
@@ -109,13 +119,18 @@ func tallest(cfg *config.Config) int {
 // estimateBytes sizes the encodes from their target bitrates: capped rate
 // control keeps every point close to what it asked for, which is exactly what
 // makes the estimate usable.
+//
+// Each job is sized by the duration of *its own* clip. Using one clip's duration
+// for all of them would understate a multi-clip run by however many clips it has.
 func estimateBytes(cfg *config.Config, jobs []bench.Job) int64 {
-	seconds := cfg.Clip.Duration.D().Seconds()
-	if seconds <= 0 {
-		return 0
-	}
 	var total float64
 	for _, j := range jobs {
+		seconds := j.Cut.Duration.D().Seconds()
+		if seconds <= 0 {
+			// An open-ended cut runs to the end of the source, which nothing here
+			// has measured yet. One unsized job makes the whole total a guess.
+			return 0
+		}
 		total += float64(j.Kbps) * 1000 * seconds / 8
 	}
 	return int64(total)
@@ -123,7 +138,7 @@ func estimateBytes(cfg *config.Config, jobs []bench.Job) int64 {
 
 func humanBytes(n int64) string {
 	if n <= 0 {
-		return "unknown (the clip has no duration set)"
+		return "unknown (a clip has no duration set, so it runs to the end of the source)"
 	}
 	const unit = 1024
 	if n < unit {

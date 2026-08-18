@@ -41,8 +41,9 @@ libvmaf    3.0.0
 config     8975adcae3f1
 ```
 
-`source` is the file the clip was cut from; `reference` is the lossless clip
-every encode and every comparison actually used. `(reused)` means the clip was
+`source` is the file the clip was cut from; each `reference` line is a lossless
+clip encodes were made from and compared against — one per entry in
+[`clips:`](configuration.md#clips), and the header says how many. `(reused)` means the clip was
 already on disk from an earlier run — its name carries the cut, so this is a
 reuse of the same frames, not of a stale file.
 
@@ -87,6 +88,7 @@ A single mean would have called the cheap rung acceptable.
 | `GAIN/+10%` | VMAF points bought by this step, per +10% bitrate. Relative on purpose: +500 kbps means something entirely different at 800 kbps and at 6000 kbps. The first row of each resolution has no previous step, hence `—`. |
 | `PSNR-Y` | Peak signal-to-noise ratio in dB, Y plane. Present only with [`vmaf.metrics`](configuration.md#vmaf). |
 | `SSIM` | Structural similarity, 0–1. Present only with `vmaf.metrics`. |
+| `SPREAD` | The VMAF distance between the best and worst clip at this point. Present only with more than one [clip](configuration.md#clips). |
 
 `P5` and `P1` come out of the per-frame section every real libvmaf log already
 carries, so no point is ever re-measured to obtain them — and `n_subsample`
@@ -123,6 +125,27 @@ say, and each is a different instruction.
   the grid. There is no knee to report, and the tool will not guess one.
 - **not enough points to tell** — fewer than two usable points at that
   resolution.
+
+## Across clips
+
+Present only when the run measured more than one [clip](configuration.md#clips).
+
+```
+  across 3 clips
+    widest disagreement 81.95 VMAF at 720p 377k
+    ! that is wider than the 6.0 VMAF between rungs — the clips disagree by more than a whole rung,
+      so measure more of the content before trusting the ladder to a single number
+```
+
+Every row of the table above it is an **average across the clips**, and this block
+is what that average cost. A spread of two or three VMAF means the cuts broadly
+agreed and the ladder is sound. A spread wider than `ladder_step` means two cuts
+of your own source disagree about that rung by more than a whole rung: the
+recommended ladder is then an average of two different answers, and the honest
+next step is to measure more content rather than to trust the number harder.
+
+That example is a real run on a source deliberately built from a flat colour, a
+detail pattern and pure noise — the extreme case, and the shape to look for.
 
 ## Efficient frontier
 
@@ -254,18 +277,19 @@ between two runs will diff.
 | `version` | string | The binary's version, or `dev` for a build from source. |
 | `generated` | string | RFC 3339, UTC. |
 | `input` | string | The source file. |
-| `reference` | object | The clip every measurement used. |
+| `references` | array | One entry per clip: `path`, `clip` (the name it is known by, absent for a single-clip run), `media`, `source`, `reused`. |
 | `options` | object | The analysis thresholds this report was computed with. |
 | `results` | array | One entry per grid point — the raw measurements. |
 | `analysis` | array | One entry per encoder — everything derived. |
 | `bd_rates` | array | Cross-encoder comparisons. **Absent** with a single encoder: nothing was compared, which is not the same as finding no difference. |
 | `environment` | object | What measured this: `ffmpeg` (the version line, verbatim), `libvmaf` (every version that wrote one of these logs), `config_sha256` (the fingerprint of the resolved config, in full — the text report shows the first twelve characters). |
 
-### `reference`
+### `references[]`
 
 | Field | Type | What it is |
 |---|---|---|
 | `path` | string | The lossless clip on disk. Its name carries the cut. |
+| `clip` | string | How this cut is named in `results[].clip` and in the file names. Absent for a single-clip run. |
 | `media` | object | Geometry of the clip: `codec`, `width`, `height`, `frame_rate`, `duration_s`. |
 | `source` | object | The same shape, for the file it was cut from. |
 | `reused` | bool | The clip was already on disk. |
@@ -287,6 +311,7 @@ One per grid point. This is the only place the per-point cost and timings live.
 |---|---|---|
 | `encoder`, `codec`, `preset`, `extra_args` | | The encoder configuration this point used. |
 | `height`, `target_kbps` | number | The grid coordinates. |
+| `clip` | string | Which cut this point was measured on. Absent for a single-clip run. |
 | `out`, `vmaf_log` | string | The encode and the libvmaf log on disk. The encode is deleted after the run unless `keep_encodes` is set; the log stays, because it is the measurement. |
 | `vmaf` | object | `mean`, `min`, `harmonic_mean`, `frames` as libvmaf pooled them; `vmaf_p1` and `vmaf_p5` from the per-frame section; `libvmaf_version` — recorded per point, so a grid resumed across an ffmpeg upgrade shows which points came from which build; plus `psnr_y` and `ssim` when the run asked for them. The optional keys are **absent** rather than zero when they were not measured: a PSNR of 0 dB would be a catastrophe, and absent is not catastrophic. |
 | `bytes` | number | The encode's real size. |
@@ -317,6 +342,12 @@ encoder can produce, so the analysis never pools them.
 `vmaf_harmonic_mean`, `vmaf_p1` / `vmaf_p5`, and `psnr_y` / `ssim` when they were
 measured. Only `kbps` and `vmaf` take part in the arithmetic; the rest is carried
 so a rung can be judged on more than its mean.
+
+With more than one clip a point also carries `clips` (how many it averages) and
+`vmaf_spread` (the distance between the best and worst of them). Both are absent
+for a single-clip run. Note that `results[]` holds the **per-clip** measurements
+and `analysis[]` the aggregated ones: the raw numbers are never thrown away, so a
+spread can always be traced back to which cut produced which end of it.
 
 **A curve** (`curves[]`): `height`, `points`, and
 
@@ -364,6 +395,9 @@ jq -r '.analysis[] | select(.encoder=="x264-fast")
 # every rung whose worst frames are far below its average
 jq -r '.results[] | select(.vmaf.vmaf_p1 != null and .vmaf.vmaf_p1 < .vmaf.mean - 15)
        | "\(.height)p \(.target_kbps)k mean \(.vmaf.mean) p1 \(.vmaf.vmaf_p1)"' ladder.json
+
+# which clip produced each end of the widest spread
+jq -r '.results[] | "\(.clip // "-") \(.height)p \(.target_kbps)k VMAF \(.vmaf.mean)"' ladder.json | sort
 
 # was everything measured by the same libvmaf?
 jq -r '.environment.libvmaf | if length > 1 then "MIXED: \(.)" else "one build: \(.[0])" end' ladder.json
