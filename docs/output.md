@@ -46,10 +46,10 @@ reuse of the same frames, not of a stale file.
 ## Measurements
 
 ```
-  RES    TARGET  ACTUAL  VMAF   MIN    GAIN/+10%
-  1080p  1500k   1528k   85.54  78.72  —
-  1080p  3000k   3056k   92.20  88.50  0.67
-  1080p  6000k   6098k   96.17  93.97  0.40
+  RES   TARGET  ACTUAL  VMAF   HMEAN  MIN    GAIN/+10%  PSNR-Y  SSIM
+  720p  600k    651k    80.29  80.09  72.94  —          35.88   0.9910
+  720p  1500k   1544k   93.12  93.09  90.14  0.94       40.49   0.9973
+  720p  3000k   3108k   97.18  97.17  95.49  0.40       46.26   0.9992
 ```
 
 | Column | What it is |
@@ -57,9 +57,20 @@ reuse of the same frames, not of a stale file.
 | `RES` | The rung's height. Width follows the source aspect ratio, rounded to an even number. |
 | `TARGET` | The bitrate the grid asked for. |
 | `ACTUAL` | The bitrate the file **is** — its size over the clip duration. Rate control never lands exactly on target, and every number downstream uses this one. |
-| `VMAF` | The pooled mean over the clip, measured at the reference resolution. |
+| `VMAF` | The pooled mean over the clip, measured at the reference resolution. This is the column every recommendation is computed from. |
+| `HMEAN` | The harmonic mean of the same frames, which weighs the worst ones more heavily. Well below `VMAF` means a few seconds fell apart and the average absorbed it; agreeing with it means the rung was consistently that good. |
 | `MIN` | The worst single frame. A rung whose mean is 93 and whose minimum is 70 is not a rung that looks like 93. |
 | `GAIN/+10%` | VMAF points bought by this step, per +10% bitrate. Relative on purpose: +500 kbps means something entirely different at 800 kbps and at 6000 kbps. The first row of each resolution has no previous step, hence `—`. |
+| `PSNR-Y` | Peak signal-to-noise ratio in dB, Y plane. Present only with [`vmaf.metrics`](configuration.md#vmaf). |
+| `SSIM` | Structural similarity, 0–1. Present only with `vmaf.metrics`. |
+
+`PSNR-Y` and `SSIM` **have no column at all** unless the run asked for them: a
+column of dashes would say "we looked and found nothing" instead of "we did not
+look". Within a column, a `—` is a point whose log predates the request — those
+get re-measured on the next run, so it should not persist.
+
+The extra metrics are reported, never acted on. Everything below this table —
+saturation, the frontier, the ladder, the BD-rate — comes from `VMAF` alone.
 
 ## Saturation
 
@@ -247,14 +258,11 @@ One per grid point. This is the only place the per-point cost and timings live.
 | `encoder`, `codec`, `preset`, `extra_args` | | The encoder configuration this point used. |
 | `height`, `target_kbps` | number | The grid coordinates. |
 | `out`, `vmaf_log` | string | The encode and the libvmaf log on disk. The encode is deleted after the run unless `keep_encodes` is set; the log stays, because it is the measurement. |
-| `vmaf` | object | `mean`, `min`, `harmonic_mean`, `frames` as libvmaf pooled them. |
+| `vmaf` | object | `mean`, `min`, `harmonic_mean`, `frames` as libvmaf pooled them, plus `psnr_y` and `ssim` when the run asked for them. Both keys are **absent** rather than zero when it did not: a PSNR of 0 dB would be a catastrophe, and absent is not catastrophic. |
 | `bytes` | number | The encode's real size. |
 | `actual_kbps` | number | `bytes` over the clip duration — the bitrate every downstream number uses. |
 | `encode_ns`, `measure_ns` | number | Wall-clock nanoseconds for the encode and the VMAF pass. `0` for a reused point. |
 | `reused` | bool | The point came off disk instead of being re-measured. |
-
-`harmonic_mean` is recorded but not yet shown in the text report — that is
-[LB-8](https://github.com/Allan-Nava/ladder-bench/blob/main/BACKLOG.md).
 
 ### `analysis[]`
 
@@ -275,7 +283,10 @@ encoder can produce, so the analysis never pools them.
 | `target_reached` | bool | `false` when no measured point reached `target_vmaf`: the top rung is then the best the grid could do, not the quality asked for. |
 
 **A point** (used in `curves[].points`, `hull` and `ladder`):
-`encoder`, `height`, `target_kbps`, `kbps` (the real one), `vmaf`, `vmaf_min`.
+`encoder`, `height`, `target_kbps`, `kbps` (the real one), `vmaf`, `vmaf_min`,
+`vmaf_harmonic_mean`, and `psnr_y` / `ssim` when they were measured. Only `kbps`
+and `vmaf` take part in the arithmetic; the rest is carried so a rung can be
+judged on more than its mean.
 
 **A curve** (`curves[]`): `height`, `points`, and
 
@@ -319,6 +330,10 @@ ladder-bench run --output json --out ladder.json
 jq -r '.analysis[] | select(.encoder=="x264-fast")
        | .curves[] | .height as $h | .points[]
        | "\($h)p \(.kbps|round)k \(.vmaf)"' ladder.json
+
+# every rung where the harmonic mean fell more than 2 points below the mean
+jq -r '.results[] | select(.vmaf.harmonic_mean < .vmaf.mean - 2)
+       | "\(.height)p \(.target_kbps)k mean \(.vmaf.mean) harmonic \(.vmaf.harmonic_mean)"' ladder.json
 
 # the headline BD-rate
 jq -r '.bd_rates[]? | "\(.test) vs \(.anchor): \(.frontier.rate_pct // "n/a")%"' ladder.json

@@ -79,6 +79,36 @@ when you get it wrong:
 The reported bitrate is the **real** one (file size over clip duration), not
 the one that was requested: rate control never lands exactly on target.
 
+### What comes out of one pass
+
+libvmaf pools more than a mean, and every log carries all of this:
+
+- **VMAF mean** — the number every recommendation in the report is computed
+  from.
+- **VMAF harmonic mean** — the same frames, weighted so the worst ones count for
+  more. When it sits well below the mean, a few seconds of the clip fell apart
+  and the average absorbed it. A rung whose mean and harmonic mean agree is a
+  rung that was consistently that good.
+- **VMAF minimum** — the single worst frame.
+
+Adding `vmaf.metrics: [psnr, ssim]` collects two more in the **same pass**, for a
+fraction of its cost: the frames are already decoded, scaled and aligned, so the
+extra work is arithmetic on pixels libvmaf is holding anyway.
+
+- **PSNR (Y plane, dB)** — pure signal error, no perceptual model. It notices
+  things VMAF forgives and forgives things VMAF notices, which is exactly why it
+  is worth having next to it.
+- **SSIM (0–1)** — structural similarity, libvmaf's float implementation.
+
+They are reported, never acted on: the knee, the frontier, the recommended ladder
+and the BD-rate all come from VMAF alone. Two metrics disagreeing is information;
+averaging them into one score would only hide which one you were trusting.
+
+Asking for them **invalidates the logs already on disk** — a log written without
+PSNR cannot be made to contain it — so those points get measured again. The
+alternative would be printing an empty column, which reads as a measurement that
+came back blank rather than one that was never taken.
+
 ## 4. The analysis
 
 All of it is arithmetic over the measured points — no model, no fitting.

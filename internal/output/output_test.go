@@ -12,13 +12,14 @@ import (
 )
 
 func sampleReport() Report {
+	// Every libvmaf log pools a harmonic mean, so every fixture point has one.
 	points := []analysis.Point{
-		{Encoder: "x264", Height: 1080, Target: 2000, Kbps: 2010, VMAF: 86, VMAFMin: 74},
-		{Encoder: "x264", Height: 1080, Target: 3000, Kbps: 3010, VMAF: 92, VMAFMin: 82},
-		{Encoder: "x264", Height: 1080, Target: 4000, Kbps: 4020, VMAF: 93.5, VMAFMin: 84},
-		{Encoder: "x264", Height: 720, Target: 1000, Kbps: 1005, VMAF: 78, VMAFMin: 66},
-		{Encoder: "x264", Height: 720, Target: 2000, Kbps: 2010, VMAF: 87, VMAFMin: 75},
-		{Encoder: "x264", Height: 720, Target: 3000, Kbps: 3005, VMAF: 88.5, VMAFMin: 77},
+		{Encoder: "x264", Height: 1080, Target: 2000, Kbps: 2010, VMAF: 86, VMAFHarmonic: 84.6, VMAFMin: 74},
+		{Encoder: "x264", Height: 1080, Target: 3000, Kbps: 3010, VMAF: 92, VMAFHarmonic: 90.8, VMAFMin: 82},
+		{Encoder: "x264", Height: 1080, Target: 4000, Kbps: 4020, VMAF: 93.5, VMAFHarmonic: 92.4, VMAFMin: 84},
+		{Encoder: "x264", Height: 720, Target: 1000, Kbps: 1005, VMAF: 78, VMAFHarmonic: 76.2, VMAFMin: 66},
+		{Encoder: "x264", Height: 720, Target: 2000, Kbps: 2010, VMAF: 87, VMAFHarmonic: 85.6, VMAFMin: 75},
+		{Encoder: "x264", Height: 720, Target: 3000, Kbps: 3005, VMAF: 88.5, VMAFHarmonic: 87.2, VMAFMin: 77},
 	}
 	opt := analysis.Options{
 		KneeGain: 0.5, TargetVMAF: 93, LadderStep: 6,
@@ -57,6 +58,87 @@ func challengerReport() Report {
 	}
 	r.Analyses = append(r.Analyses, analysis.Analyze("svt-av1", cheaper, r.Options))
 	r.BDRates = analysis.BDRates("x264", r.Analyses)
+	return r
+}
+
+// The extra metrics get a column only when the run asked for them: a column of
+// dashes reads as "we looked and found nothing", which is not what happened.
+func TestExtraMetricColumnsAppearOnlyWhenMeasured(t *testing.T) {
+	plain := sampleReport()
+	for _, render := range []func(*bytes.Buffer, Report) error{
+		func(b *bytes.Buffer, r Report) error { return Text(b, r) },
+		func(b *bytes.Buffer, r Report) error { return Markdown(b, r) },
+	} {
+		var buf bytes.Buffer
+		if err := render(&buf, plain); err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		out := buf.String()
+		for _, unwanted := range []string{"PSNR", "SSIM"} {
+			if strings.Contains(out, unwanted) {
+				t.Errorf("nothing measured %s, yet it has a column:\n%s", unwanted, out)
+			}
+		}
+		// The harmonic mean costs nothing — libvmaf pools it always — so it is
+		// always there.
+		if !strings.Contains(out, "HMEAN") && !strings.Contains(out, "VMAF harmonic") {
+			t.Errorf("the harmonic mean column is missing:\n%s", out)
+		}
+	}
+
+	withMetrics := reportWithMetrics()
+	var text, md bytes.Buffer
+	if err := Text(&text, withMetrics); err != nil {
+		t.Fatalf("Text: %v", err)
+	}
+	if err := Markdown(&md, withMetrics); err != nil {
+		t.Fatalf("Markdown: %v", err)
+	}
+	for _, want := range []string{"PSNR-Y", "SSIM", "38.25", "0.9712"} {
+		if !strings.Contains(text.String(), want) {
+			t.Errorf("text report is missing %q:\n%s", want, text.String())
+		}
+		if !strings.Contains(md.String(), want) {
+			t.Errorf("markdown report is missing %q:\n%s", want, md.String())
+		}
+	}
+	// One point of the grid was measured before the metrics were switched on.
+	// Its row must read as absent, not as zero: a PSNR of 0 dB would be a
+	// catastrophe, and this point simply was not asked.
+	leftover := ""
+	for _, line := range strings.Split(text.String(), "\n") {
+		if strings.Contains(line, "1080p") && strings.Contains(line, "2000k") {
+			leftover = line
+		}
+	}
+	if leftover == "" {
+		t.Fatalf("the leftover point is missing from the report:\n%s", text.String())
+	}
+	if strings.Contains(leftover, "38.25") || strings.Contains(leftover, "0.00") {
+		t.Errorf("the leftover point should carry no metrics: %q", leftover)
+	}
+	if strings.Count(leftover, "—") != 3 { // gain, PSNR, SSIM
+		t.Errorf("expected a dash for the gain and both unmeasured metrics: %q", leftover)
+	}
+}
+
+// reportWithMetrics is a run that asked for PSNR and SSIM, with one point left
+// over from before the request.
+func reportWithMetrics() Report {
+	r := sampleReport()
+	psnr, ssim := 38.25, 0.9712
+	points := []analysis.Point{}
+	for i, c := range r.Analyses[0].Curves {
+		for j, p := range c.Points {
+			if i == 0 && j == 0 {
+				points = append(points, p) // the leftover point
+				continue
+			}
+			p.PSNR, p.SSIM = &psnr, &ssim
+			points = append(points, p)
+		}
+	}
+	r.Analyses = []analysis.Result{analysis.Analyze("x264", points, r.Options)}
 	return r
 }
 

@@ -83,10 +83,35 @@ vmaf:
   model: version=vmaf_v0.6.1   # vmaf_4k_v0.6.1 for 4K content on 4K displays
   n_threads: 0                 # 0 = let libvmaf decide
   n_subsample: 1               # score every Nth frame
+  metrics: [psnr, ssim]        # extra metrics, collected in the same pass
 ```
 
 `n_subsample: 5` makes the measuring pass several times faster and is usually
 good enough to shape a curve; keep it at 1 for a final number.
+
+`metrics` asks libvmaf for extra quality metrics while it is already decoding
+and aligning the frames, so each one costs a fraction of the VMAF pass it rides
+along with. Two are available:
+
+| Name | What lands in the report | Unit |
+|---|---|---|
+| `psnr` | Peak signal-to-noise ratio, **Y plane only** | dB |
+| `ssim` | Structural similarity, libvmaf's float implementation | 0–1 |
+
+They are **off by default**, and not because of the cost. Turning them on makes
+every VMAF log already in the work dir stale: a log written without them cannot
+be made to contain them, so those points are encoded and measured again the next
+time you run. Switch them on when you set up a grid, not halfway through one.
+
+Only these two names are accepted. libvmaf exposes many more features, but a
+metric this tool cannot label or explain in the report is a column of numbers
+nobody can act on — a typo is an error naming the alternatives, never a silently
+dropped request.
+
+**VMAF still decides everything.** The knee, the frontier, the recommended
+ladder and the BD-rate are all computed from VMAF alone; PSNR and SSIM are there
+to be checked against when a VMAF number looks surprising. See
+[Method](method.md#4-the-analysis).
 
 ## `analysis`
 

@@ -53,6 +53,11 @@ func (r Result) Point() analysis.Point {
 		Kbps:    r.ActualKbps,
 		VMAF:    r.Score.Mean,
 		VMAFMin: r.Score.Min,
+		// Carried for the report only: the analysis reasons about bitrate
+		// against VMAF, and these are the columns a reader checks it against.
+		VMAFHarmonic: r.Score.Harmonic,
+		PSNR:         r.Score.PSNR,
+		SSIM:         r.Score.SSIM,
 	}
 }
 
@@ -211,9 +216,32 @@ func (b *Bench) Run(ctx context.Context, jobs []Job) ([]Result, error) {
 	return results, nil
 }
 
+// logCovers reports whether an existing VMAF log already holds every metric
+// the config asks for. An unreadable or unparseable log answers false: a point
+// whose measurement cannot be read has not been measured.
+func (b *Bench) logCovers(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	score, err := ffmpeg.ParseVMAFLog(data)
+	if err != nil {
+		return false
+	}
+	return score.Covers(b.Cfg.VMAF.Metrics)
+}
+
 func (b *Bench) measure(ctx context.Context, job Job) (Result, error) {
 	res := Result{Job: job}
 	fresh := b.Force || !exists(job.Out) || !exists(job.Log)
+	// A log written before `vmaf.metrics` asked for PSNR or SSIM does not
+	// contain them, and no amount of re-reading will add them. Reusing it would
+	// print an empty column, which reads as a measurement that came back blank
+	// rather than one that was never taken — so the point is measured again.
+	// Guarded on the config so the common case still touches the log once.
+	if !fresh && len(b.Cfg.VMAF.Metrics) > 0 && !b.logCovers(job.Log) {
+		fresh = true
+	}
 	if fresh {
 		gop := int(math.Round(b.Ref.Media.FrameRate * b.Cfg.Analysis.GOPSeconds))
 		start := time.Now()
@@ -242,6 +270,7 @@ func (b *Bench) measure(ctx context.Context, job Job) (Result, error) {
 			Model:     b.Cfg.VMAF.Model,
 			Threads:   b.Cfg.VMAF.Threads,
 			Subsample: b.Cfg.VMAF.Subsample,
+			Metrics:   b.Cfg.VMAF.Metrics,
 		})
 		if err := b.Exec.Run(ctx, b.FFmpeg, vmafArgs); err != nil {
 			return res, fmt.Errorf("vmaf: %w", err)

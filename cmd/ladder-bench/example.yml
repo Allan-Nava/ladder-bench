@@ -56,6 +56,12 @@ vmaf:
   model: version=vmaf_v0.6.1
   n_threads: 0 # 0 = let libvmaf decide
   n_subsample: 1 # score every Nth frame; 5 is much faster and still usable
+  # Extra metrics collected in the same pass, for a fraction of its cost:
+  # psnr (Y plane, dB) and ssim. VMAF still drives every recommendation — these
+  # are the columns to check it against when a number looks surprising.
+  # Turning them on re-measures the points already on disk: a log written
+  # without them cannot be made to contain them.
+  # metrics: [psnr, ssim]
 
 analysis:
   # A rung is considered saturated when a +10% bitrate step buys less than

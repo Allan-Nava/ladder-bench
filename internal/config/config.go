@@ -10,9 +10,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/Allan-Nava/ladder-bench/internal/ffmpeg"
 )
 
 // Defaults applied by Load when a field is left out.
@@ -109,6 +112,13 @@ type VMAF struct {
 	Model     string `yaml:"model"`
 	Threads   int    `yaml:"n_threads"`
 	Subsample int    `yaml:"n_subsample"`
+	// Metrics are extra quality metrics collected in the same libvmaf pass:
+	// `psnr`, `ssim`. They ride along with the VMAF measurement for a fraction
+	// of its cost, and they are what a reader who does not trust VMAF asks for
+	// next. Empty by default, because turning them on invalidates the VMAF logs
+	// already on disk — a log written without them cannot be made to contain
+	// them, so those points get measured again.
+	Metrics []string `yaml:"metrics"`
 }
 
 // Analysis holds the thresholds that turn the measured points into advice.
@@ -247,6 +257,16 @@ func (c *Config) Validate() error {
 	}
 	if c.VMAF.Threads < 0 {
 		return fmt.Errorf("vmaf.n_threads: %d, must be >= 0 (0 = auto)", c.VMAF.Threads)
+	}
+	seenMetric := map[string]bool{}
+	for _, m := range c.VMAF.Metrics {
+		if !ffmpeg.KnownMetric(m) {
+			return fmt.Errorf("vmaf.metrics: unknown metric %q (%s)", m, strings.Join(ffmpeg.KnownMetrics(), ", "))
+		}
+		if seenMetric[m] {
+			return fmt.Errorf("vmaf.metrics: %q listed twice", m)
+		}
+		seenMetric[m] = true
 	}
 	if c.Analysis.KneeGain < 0 {
 		return fmt.Errorf("analysis.knee_gain: %.2f, must be >= 0", c.Analysis.KneeGain)

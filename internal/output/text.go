@@ -64,8 +64,17 @@ func writeBDLine(w io.Writer, label string, bd analysis.BD) {
 }
 
 func writeCurves(w io.Writer, a analysis.Result) {
+	// PSNR and SSIM only get a column when the run asked for them.
+	psnr, ssim := measured(a, pointPSNR), measured(a, pointSSIM)
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "  RES\tTARGET\tACTUAL\tVMAF\tMIN\tGAIN/+10%")
+	head := "  RES\tTARGET\tACTUAL\tVMAF\tHMEAN\tMIN\tGAIN/+10%"
+	if psnr {
+		head += "\tPSNR-Y"
+	}
+	if ssim {
+		head += "\tSSIM"
+	}
+	fmt.Fprintln(tw, head)
 	for _, c := range a.Curves {
 		g := gains(c.Points)
 		for _, p := range c.Points {
@@ -73,8 +82,15 @@ func writeCurves(w io.Writer, a analysis.Result) {
 			if v, ok := g[p.Target]; ok {
 				gain = fmt.Sprintf("%.2f", v)
 			}
-			fmt.Fprintf(tw, "  %s\t%dk\t%s\t%.2f\t%.2f\t%s\n",
-				res(p.Height), p.Target, kbps(p.Kbps), p.VMAF, p.VMAFMin, gain)
+			row := fmt.Sprintf("  %s\t%dk\t%s\t%.2f\t%s\t%.2f\t%s",
+				res(p.Height), p.Target, kbps(p.Kbps), p.VMAF, harmonic(p.VMAFHarmonic), p.VMAFMin, gain)
+			if psnr {
+				row += "\t" + optional(p.PSNR, "%.2f")
+			}
+			if ssim {
+				row += "\t" + optional(p.SSIM, "%.4f")
+			}
+			fmt.Fprintln(tw, row)
 		}
 	}
 	_ = tw.Flush()

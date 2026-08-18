@@ -91,6 +91,11 @@ type VMAFSpec struct {
 	Model         string
 	Threads       int
 	Subsample     int
+	// Metrics are the extra metrics to collect in this same pass, by the names
+	// config uses (see KnownMetrics). Unknown names are ignored here — config
+	// rejects them, and silently dropping one is better than asking libvmaf for
+	// a feature it will refuse the whole measurement over.
+	Metrics []string
 }
 
 // VMAFArgs builds the comparison of one encode against the reference.
@@ -118,6 +123,9 @@ func VMAFArgs(s VMAFSpec) []string {
 	}
 	if s.Subsample > 1 {
 		opts = append(opts, "n_subsample="+strconv.Itoa(s.Subsample))
+	}
+	if f := featureOption(s.Metrics); f != "" {
+		opts = append(opts, "feature="+f)
 	}
 	filter := fmt.Sprintf(
 		"[0:v]scale=%d:%d:flags=bicubic,setpts=PTS-STARTPTS[dist];[1:v]setpts=PTS-STARTPTS[ref];[dist][ref]libvmaf=%s",

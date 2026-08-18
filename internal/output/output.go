@@ -96,6 +96,44 @@ func gains(points []analysis.Point) map[int]float64 {
 	return out
 }
 
+// optional renders a metric a run may not have asked for. A dash is the honest
+// rendering of "not measured": printing a zero instead would read as a
+// catastrophic measurement rather than an absent one.
+func optional(v *float64, format string) string {
+	if v == nil {
+		return "—"
+	}
+	return fmt.Sprintf(format, *v)
+}
+
+// harmonic renders the VMAF harmonic mean, or a dash when the log did not carry
+// one. Zero is impossible for a real comparison, so a zero here means the number
+// is missing rather than catastrophic — and printing 0.00 would say the opposite.
+func harmonic(v float64) string {
+	if v == 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%.2f", v)
+}
+
+// measured reports whether any point of this encoder carries the metric, which
+// is what decides whether its column appears at all. A column of dashes says
+// "we looked and found nothing"; no column says "we did not look".
+func measured(a analysis.Result, pick func(analysis.Point) *float64) bool {
+	for _, c := range a.Curves {
+		for _, p := range c.Points {
+			if pick(p) != nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func pointPSNR(p analysis.Point) *float64 { return p.PSNR }
+
+func pointSSIM(p analysis.Point) *float64 { return p.SSIM }
+
 func encoderOf(results []bench.Result, name string) (bench.Result, bool) {
 	for _, r := range results {
 		if r.Encoder == name {

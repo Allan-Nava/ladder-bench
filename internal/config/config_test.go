@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -128,5 +129,45 @@ rungs:
 	}
 	if got := cfg.Points(); got != 6 {
 		t.Errorf("Points() = %d, want 6", got)
+	}
+}
+
+func TestVMAFMetricsAreValidated(t *testing.T) {
+	base := `
+input: in.mp4
+rungs:
+  - height: 1080
+    bitrates: [3000]
+vmaf:
+  metrics: %s
+`
+	ok, err := Parse([]byte(fmt.Sprintf(base, "[psnr, ssim]")))
+	if err != nil {
+		t.Fatalf("a valid metric list was rejected: %v", err)
+	}
+	if len(ok.VMAF.Metrics) != 2 {
+		t.Errorf("metrics = %v", ok.VMAF.Metrics)
+	}
+	// Nothing is the default: turning metrics on invalidates existing logs, so
+	// it has to be asked for.
+	plain, err := Parse([]byte("input: in.mp4\nrungs:\n  - height: 1080\n    bitrates: [3000]\n"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(plain.VMAF.Metrics) != 0 {
+		t.Errorf("metrics default to %v, want none", plain.VMAF.Metrics)
+	}
+	// A misspelling must name the alternatives rather than being ignored: a
+	// silently dropped metric is a column that never appears for no stated
+	// reason.
+	_, err = Parse([]byte(fmt.Sprintf(base, "[psnr, sslm]")))
+	if err == nil {
+		t.Fatal("an unknown metric was accepted")
+	}
+	if !strings.Contains(err.Error(), "sslm") || !strings.Contains(err.Error(), "ssim") {
+		t.Errorf("error should name the typo and the alternatives, got: %v", err)
+	}
+	if _, err := Parse([]byte(fmt.Sprintf(base, "[psnr, psnr]"))); err == nil {
+		t.Error("a duplicated metric was accepted")
 	}
 }

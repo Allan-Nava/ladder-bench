@@ -67,13 +67,13 @@ where it stopped (`--force` re-encodes everything).
 
 ```
 encoder x264-fast (libx264, preset veryfast)
-  RES    TARGET  ACTUAL  VMAF   MIN    GAIN/+10%
-  1080p  1500k   1489k   86.74  79.90  —
-  1080p  3000k   3037k   93.14  90.25  0.62
-  1080p  6000k   6136k   96.87  95.47  0.37
-  720p   800k    736k    79.63  71.30  —
-  720p   1500k   1461k   84.79  77.10  0.53
-  720p   3000k   2974k   88.38  83.72  0.35
+  RES    TARGET  ACTUAL  VMAF   HMEAN  MIN    GAIN/+10%
+  1080p  1500k   1489k   86.74  85.90  79.90  —
+  1080p  3000k   3037k   93.14  92.71  90.25  0.62
+  1080p  6000k   6136k   96.87  96.62  95.47  0.37
+  720p   800k    736k    79.63  78.02  71.30  —
+  720p   1500k   1461k   84.79  83.74  77.10  0.53
+  720p   3000k   2974k   88.38  87.55  83.72  0.35
 
   saturation
     1080p  flattens at 3037k (VMAF 93.1) — the top 51% of this grid's bitrate buys nothing
@@ -140,6 +140,12 @@ that merely look precise.
 - **The ladder rungs are measured points**, never interpolated bitrates, and
   they are spaced by ~6 VMAF (roughly one just-noticeable difference) instead
   of by the usual bitrate halving.
+- **More than one number per point.** Every report carries the VMAF **harmonic
+  mean** next to the mean — when it sits well below, a few seconds of the clip
+  fell apart and the average absorbed it. `vmaf.metrics: [psnr, ssim]` adds
+  PSNR-Y and SSIM in the same pass, for a fraction of its cost. They are
+  reported, never acted on: VMAF alone drives every recommendation, because
+  averaging two metrics into one score only hides which one you were trusting.
 
 ## Cost
 

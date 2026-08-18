@@ -22,9 +22,18 @@ func Markdown(out io.Writer, r Report) error {
 
 	for _, a := range r.Analyses {
 		fmt.Fprintf(w, "\n## Encoder `%s`\n", a.Encoder)
+		psnr, ssim := measured(a, pointPSNR), measured(a, pointSSIM)
 		fmt.Fprintf(w, "\n### Measurements\n\n")
-		fmt.Fprintln(w, "| Resolution | Target | Actual | VMAF | VMAF min | Gain per +10% |")
-		fmt.Fprintln(w, "|---|---:|---:|---:|---:|---:|")
+		head := "| Resolution | Target | Actual | VMAF | VMAF harmonic | VMAF min | Gain per +10% |"
+		rule := "|---|---:|---:|---:|---:|---:|---:|"
+		if psnr {
+			head, rule = head+" PSNR-Y |", rule+"---:|"
+		}
+		if ssim {
+			head, rule = head+" SSIM |", rule+"---:|"
+		}
+		fmt.Fprintln(w, head)
+		fmt.Fprintln(w, rule)
 		for _, c := range a.Curves {
 			g := gains(c.Points)
 			for _, p := range c.Points {
@@ -32,8 +41,15 @@ func Markdown(out io.Writer, r Report) error {
 				if v, ok := g[p.Target]; ok {
 					gain = fmt.Sprintf("%.2f", v)
 				}
-				fmt.Fprintf(w, "| %s | %dk | %s | %.2f | %.2f | %s |\n",
-					res(p.Height), p.Target, kbps(p.Kbps), p.VMAF, p.VMAFMin, gain)
+				row := fmt.Sprintf("| %s | %dk | %s | %.2f | %s | %.2f | %s |",
+					res(p.Height), p.Target, kbps(p.Kbps), p.VMAF, harmonic(p.VMAFHarmonic), p.VMAFMin, gain)
+				if psnr {
+					row += " " + optional(p.PSNR, "%.2f") + " |"
+				}
+				if ssim {
+					row += " " + optional(p.SSIM, "%.4f") + " |"
+				}
+				fmt.Fprintln(w, row)
 			}
 		}
 

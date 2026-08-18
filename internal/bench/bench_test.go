@@ -41,8 +41,18 @@ func (f *fakeExec) Run(_ context.Context, _ string, args []string) error {
 			score = f.scoreFor(distorted)
 		}
 		log := logPath(args[i+1])
-		body := fmt.Sprintf(`{"frames":[{"frameNum":0}],"pooled_metrics":{"vmaf":{"min":%.2f,"max":100,"mean":%.2f,"harmonic_mean":%.2f}}}`,
+		// The fake log carries the extra metrics only when the filter asked for
+		// them, exactly like libvmaf: that is what makes a log written by an
+		// earlier run stale rather than merely old.
+		pooled := fmt.Sprintf(`"vmaf":{"min":%.2f,"max":100,"mean":%.2f,"harmonic_mean":%.2f}`,
 			score-5, score, score-1)
+		if strings.Contains(args[i+1], "name=psnr") {
+			pooled += `,"psnr_y":{"min":30,"max":45,"mean":38.25,"harmonic_mean":38}`
+		}
+		if strings.Contains(args[i+1], "name=float_ssim") {
+			pooled += `,"float_ssim":{"min":0.9,"max":0.99,"mean":0.9712,"harmonic_mean":0.97}`
+		}
+		body := fmt.Sprintf(`{"frames":[{"frameNum":0}],"pooled_metrics":{%s}}`, pooled)
 		return os.WriteFile(log, []byte(body), 0o644)
 	}
 	out := args[len(args)-1]
@@ -319,6 +329,62 @@ func TestRunPassesOnAnInterruption(t *testing.T) {
 	_, err := b.Run(ctx, Grid(cfg))
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("an interrupted run should report the interruption, got %v", err)
+	}
+}
+
+// Turning on `vmaf.metrics` invalidates the logs already on disk: they cannot be
+// made to contain a metric nobody asked libvmaf for. Reusing one would print an
+// empty column, which reads as a measurement that came back blank.
+func TestRunReMeasuresLogsMissingTheRequestedMetrics(t *testing.T) {
+	cfg := testConfig(t)
+	exec := &fakeExec{}
+	b := newBench(t, cfg, exec)
+	ctx := context.Background()
+	if err := b.PrepareReference(ctx); err != nil {
+		t.Fatalf("PrepareReference: %v", err)
+	}
+	jobs := Grid(cfg)
+	first, err := b.Run(ctx, jobs)
+	if err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	for _, r := range first {
+		if r.Score.PSNR != nil {
+			t.Fatalf("nothing asked for PSNR, yet %s has one", r.Out)
+		}
+	}
+	calls := exec.count()
+
+	// Same work dir, same points — but now the config wants PSNR.
+	cfg.VMAF.Metrics = []string{"psnr"}
+	second, err := b.Run(ctx, jobs)
+	if err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	for _, r := range second {
+		if r.Reused {
+			t.Errorf("%s was reused although its log has no PSNR", r.Out)
+		}
+		if r.Score.PSNR == nil || *r.Score.PSNR != 38.25 {
+			t.Errorf("%s: PSNR = %v, want 38.25 from the re-measurement", r.Out, r.Score.PSNR)
+		}
+	}
+	if exec.count() <= calls {
+		t.Error("the second run measured nothing at all")
+	}
+
+	// Now the logs cover the request, so a third run is back to reusing them.
+	third, err := b.Run(ctx, jobs)
+	if err != nil {
+		t.Fatalf("third run: %v", err)
+	}
+	for _, r := range third {
+		if !r.Reused {
+			t.Errorf("%s was re-measured although its log already has PSNR", r.Out)
+		}
+		if r.Score.PSNR == nil {
+			t.Errorf("%s lost its PSNR on reuse", r.Out)
+		}
 	}
 }
 

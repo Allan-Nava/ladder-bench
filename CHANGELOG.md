@@ -2,6 +2,26 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/it/1.1.0/), versioni [SemVer](https://semver.org/lang/it/).
 
+## 0.3.0
+
+### Aggiunto
+
+- **Metriche affiancate a VMAF (LB-8).** Ogni report mostra ora la colonna `HMEAN`, la **media armonica** VMAF: gli stessi frame, pesati in modo che i peggiori contino di più. libvmaf la calcola sempre e il codice la leggeva già, ma non finiva da nessuna parte — ed è la colonna che smaschera un clip con pochi secondi rotti, dove la media aritmetica se li assorbe. Quando `HMEAN` sta molto sotto `VMAF` quel rung non è stato buono, è stato buono in media.
+
+- **`vmaf.metrics: [psnr, ssim]`** aggiunge **PSNR (piano Y, dB)** e **SSIM** nello *stesso* passaggio di misura, quindi a una frazione del suo costo: i frame sono già decodificati, riscalati e allineati, e il lavoro in più è aritmetica su pixel che libvmaf ha già in mano. Sono le colonne che chiede chi non si fida di VMAF, e servono proprio a essere in disaccordo: PSNR nota cose che VMAF perdona e perdona cose che VMAF nota.
+
+  Tre scelte:
+  - **VMAF resta l'unica cosa su cui si decide.** Ginocchio, frontiera, ladder consigliata e BD-rate vengono da VMAF e da nient'altro: mediare due metriche in un punteggio solo nasconderebbe di quale delle due ti stavi fidando;
+  - **il set di nomi è chiuso** (`psnr`, `ssim`). libvmaf espone molte altre feature, ma una metrica che il report non sa etichettare né spiegare è una colonna di numeri su cui nessuno può agire. Un nome sbagliato è un errore che elenca le alternative, mai una richiesta ignorata in silenzio;
+  - **PSNR è dichiaratamente il solo piano Y.** "PSNR" senza qualificazione in una discussione sui codec vuol dire di solito luma, e dirlo costa meno che farselo chiedere.
+
+- **Accendere le metriche rimisura i punti già su disco.** Un log VMAF scritto senza PSNR non può essere fatto contenere PSNR, quindi quei punti vengono ricodificati e rimisurati al run successivo — automaticamente, senza `--force`. L'alternativa era riusare il log e stampare una colonna vuota, che si legge come una misura tornata in bianco invece che come una misura mai fatta. Per lo stesso motivo le due colonne **non compaiono affatto** se il run non le ha chieste: una colonna di trattini direbbe "abbiamo guardato e non c'era niente".
+
+### Modificato
+
+- **Nel JSON** ogni punto porta `vmaf_harmonic_mean`, e `psnr_y` / `ssim` quando sono state misurate. Le due chiavi sono **assenti**, non zero, quando non lo sono state: uno PSNR di 0 dB sarebbe una catastrofe, e "non misurato" non è una catastrofe. Solo `kbps` e `vmaf` partecipano all'aritmetica; il resto viaggia perché un rung si giudica su più della sua media.
+- **Documentazione**: `configuration.md` (la chiave `metrics`, la tabella dei nomi, l'avvertenza sulla cache), `method.md` (cosa esce da un passaggio solo e perché le metriche extra si riportano ma non si usano), `output.md` (le colonne nuove, la regola del trattino, i campi JSON) e `cli.md` (la rimisura come terza conseguenza di una work dir riusata).
+
 ## 0.2.1
 
 Solo documentazione e sito: il binario è identico a 0.2.0.

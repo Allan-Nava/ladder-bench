@@ -9,6 +9,10 @@ package analysis
 import "sort"
 
 // Point is one measurement: an encode at a resolution and its quality.
+//
+// Only Kbps and VMAF take part in the arithmetic. The rest is carried through
+// so the report can show what a number was measured alongside — a rung is
+// judged on more than its mean.
 type Point struct {
 	Encoder string  `json:"encoder"`
 	Height  int     `json:"height"`
@@ -16,6 +20,12 @@ type Point struct {
 	Kbps    float64 `json:"kbps"`
 	VMAF    float64 `json:"vmaf"`
 	VMAFMin float64 `json:"vmaf_min"`
+	// VMAFHarmonic weighs the worst frames more heavily than the mean does.
+	VMAFHarmonic float64 `json:"vmaf_harmonic_mean,omitempty"`
+	// PSNR (Y plane, dB) and SSIM are nil unless the run asked for them. A zero
+	// could not say "not measured", and absent is not the same as terrible.
+	PSNR *float64 `json:"psnr_y,omitempty"`
+	SSIM *float64 `json:"ssim,omitempty"`
 }
 
 // Rendition is one rung of an existing ladder, for the savings comparison.

@@ -126,7 +126,7 @@ A point is reused when both its encode and its VMAF log are already on disk, so
 an interrupted grid picks up where it stopped and re-rendering the same
 measurements in another format costs nothing.
 
-Two consequences worth knowing before trusting a cached work dir:
+Three consequences worth knowing before trusting a cached work dir:
 
 - **Renaming an encoder invalidates its points**, because the output files are
   named after it. Changing a preset **without** renaming does *not* — use
@@ -134,6 +134,10 @@ Two consequences worth knowing before trusting a cached work dir:
 - **Changing `clip:` is safe.** The reference file name carries the cut
   (`reference_60s_30s.mkv`), so a new cut is a new file rather than a silent
   reuse of the old one.
+- **Adding to [`vmaf.metrics`](configuration.md#vmaf) re-measures by itself**,
+  without `--force`. A log written before PSNR was asked for does not contain it
+  and never will, so those points are encoded and measured again. Nothing is
+  silently reused with a column left blank.
 
 ### The work directory
 
