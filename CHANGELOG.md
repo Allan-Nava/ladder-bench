@@ -2,6 +2,38 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/it/1.1.0/), versioni [SemVer](https://semver.org/lang/it/).
 
+## 0.8.0
+
+### Aggiunto
+
+- **Installabile con Homebrew (LB-24).** `brew install --cask Allan-Nava/tap/ladder-bench` su macOS e su Linuxbrew: il cask lo genera GoReleaser a ogni tag `v*` e lo pubblica su `Allan-Nava/homebrew-tap`, accanto agli altri.
+
+  Quattro dettagli decidono se quell'install vale qualcosa:
+  - **è un cask, non una formula.** `brews:` è deprecato in GoReleaser v2 (`goreleaser check` fallisce) e una formula che spedisce un binario già compilato sta facendo il lavoro di un cask. Un cask il cui unico artefatto è un `binary` non è macOS-only, quindi Linuxbrew lo installa comunque;
+  - **il cask dipende da `ffmpeg`.** libvmaf è un'opzione di compilazione e l'unica che questo tool non può aggirare: senza, il binario sa stampare l'help e nient'altro. La bottle di Homebrew è costruita `--enable-libvmaf`, quindi tirarla dentro come dipendenza è ciò che rende `brew install` un'installazione che *misura*. A runtime vince comunque il primo ffmpeg nel PATH — `ladder-bench doctor` dice quale ha trovato;
+  - **la quarantine viene rimossa in postflight.** Il binario non è firmato né notarizzato: senza togliere `com.apple.quarantine` il primo avvio muore con "cannot be opened because the developer cannot be verified", e in quel messaggio non c'è niente che dica che il problema era Gatekeeper e non ladder-bench;
+  - **`skip_upload: auto`**, cioè un tag di prerelease non muove il tap: altrimenti un `v1.0.0-rc.1` consegnerebbe a tutti una release candidate via `brew install`, che è l'opposto di cosa serve una rc. La prerelease resta su GitHub, installabile di proposito dall'archivio.
+
+  Il push nel tap è **cross-repo**, quindi il `GITHUB_TOKEN` del job di release non basta: serve il secret `HOMEBREW_TAP_GITHUB_TOKEN` (PAT con `contents:write` sul tap) in questo repository, come già in `checkfleet`.
+
+- **`Brew test`: il tap viene provato installandolo davvero.** Un workflow su macOS arm64 e Intel installa il cask dopo ogni release, a mano e ogni settimana (un tap si rompe in silenzio il giorno che un asset di release viene cancellato), e verifica che il binario riporti una versione vera, che la quarantine sia sparita e che l'ffmpeg tirato dentro abbia il filtro `libvmaf`.
+
+  È anche **l'unico posto automatico dove una misura vera gira**: la CI normale non ha libvmaf e non deve averlo, ma un cask che dipende da ffmpeg di Homebrew ce l'ha, quindi il job codifica e misura due punti su un clip sintetico di due secondi. Un install che consegna un binario incapace di misurare non è un install da riportare verde.
+
+- **La ladder si esporta (LB-14).** `ladder-bench export report.json --format hls|dash|json` la scrive nella forma che un altro sistema accetta, perché una ladder che va ricopiata a mano in un packager è una ladder che prima o poi verrà ricopiata sbagliata. Legge un report, quindi esportare è gratis e si può fare una volta per packager.
+
+  Tre bitrate per rung, perché rispondono a domande diverse: `target_kbps` è quello che ha chiesto la griglia, `peak_kbps` è il **cap** dato all'encode (110% del target) — che è ciò che un `BANDWIDTH` HLS deve dichiarare, essendo un picco — e `kbps` è quello che il file ha misurato, esportato come `AVERAGE-BANDWIDTH`.
+
+  Due cose che si rifiuta di fare:
+  - **non inventa `CODECS`.** Porta il profile e il level che l'encoder ha scelto, che qui non si misurano: si conosce il nome dell'encoder e il bitrate. Una stringa indovinata produce una playlist che i player rifiutano in modi che sembrano problemi di contenuto, quindi l'attributo resta fuori e l'export dice come leggerlo da un encode vero (`codecs="TODO"` nel frammento DASH, per lo stesso motivo: un frammento che non si incolla non serve neanche);
+  - **non inventa `RESOLUTION`.** La larghezza si deriva dalla geometria del reference come la deriva `scale=-2:H`, e si **omette** quando non c'è geometria da cui derivarla.
+
+  I rung si identificano come `<height>p_<target>k` e non per altezza: una ladder consigliata può avere due rung alla stessa risoluzione, e due voci di playlist che puntano a un URI solo è una playlist che i player non possono usare. Trovato guardando l'output vero: il primo export aveva due `1080p.m3u8`.
+
+- **Il grafico, in SVG scritto a mano (LB-15).** `ladder-bench chart report.json --out chart.svg`: una linea per risoluzione, la frontiera efficiente disegnata sopra come inviluppo, i ginocchi cerchiati e `target_vmaf` tratteggiato — che risponde a "questa griglia ci arriva?" a colpo d'occhio. Nessuna dipendenza, nessun template, niente da installare per renderizzarlo.
+
+  Tre scelte sul disegno: **l'asse dei bitrate è logaritmico**, perché è come si legge un bitrate — il passo da 500k a 1000k è la stessa decisione di quello da 3000k a 6000k e devono occupare la stessa distanza; **non dipinge niente dietro di sé**, perché un SVG che si dipinge il bianco da solo si legge come un buco in un README scuro, e i colori sono mezzitoni che funzionano su entrambi; **la provenienza sta sul grafico** (sorgente, fingerprint della config, timestamp), perché un'immagine viaggia più lontano del report da cui viene, e una curva che non sa cosa l'ha misurata è un ornamento.
+
 ## 0.7.0
 
 ### Aggiunto

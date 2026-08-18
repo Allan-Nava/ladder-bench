@@ -57,14 +57,27 @@ jobs:
           lb run --config bench/ladder-bench.yml --input clip.mp4 \
             --output json --out ladder.json --quiet
 
+      - name: The ladder and the picture
+        run: |
+          lb() {
+            docker run --rm -v "$PWD:/work" --user "$(id -u):$(id -g)" "$LB" "$@"
+          }
+          lb export ladder.json --format hls --out master.m3u8
+          lb chart  ladder.json --out chart.svg
+
       - uses: actions/upload-artifact@v4
         with:
           name: ladder-bench
-          path: ladder.json
+          path: |
+            ladder.json
+            master.m3u8
+            chart.svg
 ```
 
 The second `run` costs nothing: every point is already on disk, so it only
-re-renders the report in another format.
+re-renders the report in another format. `export` and `chart` cost nothing either
+— they read the JSON — so the job can leave behind a playlist and a picture as
+well as the numbers.
 
 **`docker run`, not `container:`.** The image is Alpine-based, and a job
 `container:` has to run GitHub's own Node.js for every JavaScript action —
@@ -75,6 +88,12 @@ work dir owned by the runner user so `upload-artifact` can read it.
 If you would rather build from source, add `actions/setup-go` and
 `go install github.com/Allan-Nava/ladder-bench/cmd/ladder-bench@latest`, and
 bring your own ffmpeg with libvmaf.
+
+On a **macOS runner** the image is not the shortest path — those runners already
+have Homebrew, so `brew install --cask Allan-Nava/tap/ladder-bench` installs the
+CLI and an ffmpeg that can measure in one step. It is also the slower and dearer
+runner, so it earns its place only when the point is to measure hardware encoders
+(VideoToolbox), not to save setup.
 
 ## Caching between runs
 

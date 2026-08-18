@@ -35,6 +35,54 @@ changelog:
   # A generated commit list next to it would be noise.
   disable: true
 
+# `brew install --cask Allan-Nava/tap/ladder-bench` on every non-prerelease tag.
+#
+# A **cask**, not a formula: `brews:` is deprecated in GoReleaser v2 (`goreleaser
+# check` fails on it), and a formula that ships a pre-built binary is what a cask
+# is for anyway. A cask whose only artifact is a `binary` is not macOS-only, so
+# Linuxbrew gets it too — the same shape as the other casks in that tap.
+homebrew_casks:
+  - name: ladder-bench
+    repository:
+      owner: Allan-Nava
+      name: homebrew-tap
+      # Cross-repo push: the release job's GITHUB_TOKEN is scoped to this
+      # repository, so the tap needs a PAT of its own.
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://allan-nava.github.io/ladder-bench/"
+    description: "Measure your ABR encoding ladder instead of inheriting it"
+    # ffmpeg is not an optional extra here: without it the binary can print its
+    # own help and nothing else. Homebrew's bottle is built --enable-libvmaf,
+    # which is the one build option this tool cannot work around, so pulling it
+    # in as a dependency is what makes `brew install` land on something that can
+    # actually measure. A hand-built ffmpeg earlier on PATH still wins at run
+    # time — `ladder-bench doctor` prints which one it found.
+    dependencies:
+      - formula: ffmpeg
+    caveats: |
+      ladder-bench measures with libvmaf, which is a compile-time option of
+      ffmpeg. Homebrew's ffmpeg has it and was just installed as a dependency,
+      but whatever ffmpeg comes first on your PATH is the one that gets used:
+
+        ladder-bench doctor    # says which ffmpeg, and whether it can measure
+
+    # Unsigned binary downloaded from a browser-facing URL: without stripping
+    # com.apple.quarantine the first run dies with "cannot be opened because the
+    # developer cannot be verified", and nothing in that message says the problem
+    # was Gatekeeper rather than ladder-bench.
+    hooks:
+      post:
+        install: |
+          if system_command "/usr/bin/xattr", args: ["-h"], print_stderr: false
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/ladder-bench"]
+          end
+    # "auto" = publish on a normal tag, skip on a prerelease. Otherwise a
+    # v1.0.0-rc.1 tag would push its cask to the tap and `brew install` would
+    # hand every user a release candidate, which is the opposite of what an rc is
+    # for. GitHub still publishes the prerelease, so an rc stays installable on
+    # purpose, from the archive.
+    skip_upload: "auto"
+
 release:
   draft: false
   prerelease: auto

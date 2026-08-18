@@ -1,0 +1,116 @@
+name: Brew test
+
+# Verifies that `brew install --cask Allan-Nava/tap/ladder-bench` works end to
+# end: after every Release (so the freshly-pushed cask is the one exercised), on
+# demand, and weekly — a tap rots quietly when a release asset is deleted.
+#
+# This is also the only automated place where a real measurement runs. The normal
+# CI has no libvmaf and must not grow one, but a cask that depends on Homebrew's
+# ffmpeg does have it, so this job encodes and scores two points on a synthetic
+# clip. An install that lands a binary which cannot measure anything is not an
+# install worth reporting as green.
+#
+# The Intel leg is `macos-15-intel`, NOT `macos-13`: that image was retired on
+# 2025-12-04, and a job asking for a label with no runners behind it does not
+# fail — it stays queued forever, which looks like a slow run and verifies
+# nothing. `macos-15-intel` is GitHub's last x86_64 macOS image.
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Expected version without the leading v (e.g. 0.8.0); empty = don't assert an exact version"
+        required: false
+        default: ""
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  brew-install:
+    # For the Release trigger, only run when the release actually succeeded.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15-intel] # arm64, intel
+    runs-on: ${{ matrix.os }}
+    # A guard, not an optimisation: install plus two 2-second encodes is a few
+    # minutes, so anything near this limit means the job is hanging on an
+    # interactive prompt or a stalled download and should say so.
+    timeout-minutes: 30
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      # Homebrew 6+ asks to "trust" a third-party tap interactively; disable that
+      # gate so a headless install doesn't hang.
+      HOMEBREW_NO_REQUIRE_TAP_TRUST: "1"
+    steps:
+      - name: Install from the tap
+        run: brew install --cask Allan-Nava/tap/ladder-bench
+
+      - name: It runs and reports a real version
+        run: |
+          set -euo pipefail
+          which ladder-bench
+          out="$(ladder-bench version)"
+          echo "$out"
+          # Must not be the local 'dev' string — a release cask carries a real version.
+          echo "$out" | grep -Eq '^ladder-bench [0-9]+\.[0-9]+\.[0-9]+' \
+            || { echo "::error::unexpected version output: $out"; exit 1; }
+
+      - name: Assert the expected version (manual dispatch only)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
+        run: ladder-bench version | grep -qx "ladder-bench ${{ inputs.version }}"
+
+      - name: Gatekeeper quarantine attribute is stripped
+        run: |
+          set -euo pipefail
+          bin="$(readlink -f "$(which ladder-bench)")"
+          if xattr -l "$bin" 2>/dev/null | grep -qi com.apple.quarantine; then
+            echo "::error::$bin still has com.apple.quarantine — the postflight hook failed"
+            exit 1
+          fi
+          echo "no quarantine attribute"
+
+      - name: The ffmpeg the cask pulled in can measure
+        run: |
+          set -euo pipefail
+          which ffmpeg ffprobe
+          ffmpeg -hide_banner -filters | awk '{print $2}' | grep -qx libvmaf \
+            || { echo "::error::the ffmpeg on PATH has no libvmaf filter"; exit 1; }
+
+      - name: Smoke — measure two points for real
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          ffmpeg -hide_banner -loglevel error -f lavfi \
+            -i "testsrc2=size=640x360:rate=25" -t 4 \
+            -c:v libx264 -crf 18 -pix_fmt yuv420p -y source.mp4
+          # Written by hand rather than from `ladder-bench init`: the example
+          # config points at a 1080p source and cuts at 60s, and neither fits a
+          # four-second synthetic clip.
+          cat > lb.yml <<'YAML'
+          input: source.mp4
+          work_dir: .ladder-bench
+          clip:
+            start: "0s"
+            duration: "2s"
+          rungs:
+            - height: 360
+              bitrates: [400, 900]
+          encoders:
+            - name: h264
+              codec: libx264
+          YAML
+          ladder-bench doctor --config lb.yml
+          ladder-bench run --config lb.yml --output markdown
+
+      - name: Uninstall
+        if: always()
+        run: brew uninstall --cask ladder-bench || true

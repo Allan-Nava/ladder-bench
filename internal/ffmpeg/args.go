@@ -69,7 +69,7 @@ func EncodeArgs(s EncodeSpec) []string {
 	}
 	args = append(args,
 		"-b:v", kbps(s.Kbps),
-		"-maxrate", kbps(s.Kbps*110/100),
+		"-maxrate", kbps(s.Kbps*MaxratePct/100),
 		"-bufsize", kbps(s.Kbps*2),
 	)
 	if s.GOP > 0 {
@@ -80,6 +80,14 @@ func EncodeArgs(s EncodeSpec) []string {
 	args = append(args, s.Extra...)
 	return append(args, s.Out)
 }
+
+// MaxratePct is the cap every encode is given, as a percentage of its target
+// bitrate.
+//
+// Exported because a ladder handed to a packager has to declare the same number:
+// an HLS BANDWIDTH attribute is a peak, and the peak of these encodes is the cap
+// they were made with, not the average they came out at.
+const MaxratePct = 110
 
 // VMAFSpec compares one encode against the reference.
 type VMAFSpec struct {

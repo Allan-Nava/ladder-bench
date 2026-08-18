@@ -5,6 +5,8 @@
 //	ladder-bench plan   --config ladder-bench.yml
 //	ladder-bench run    --config ladder-bench.yml --output markdown
 //	ladder-bench compare baseline.json current.json --exit-on-regression
+//	ladder-bench export current.json --format hls
+//	ladder-bench chart  current.json --out chart.svg
 //
 // It encodes a reference clip across a grid of (resolution, bitrate) points,
 // scores each one with VMAF, and reports where each resolution stops paying
@@ -41,6 +43,10 @@ func main() {
 		err = runPlan(ctx, os.Args[2:])
 	case "compare":
 		err = runCompare(os.Args[2:])
+	case "export":
+		err = runExport(os.Args[2:])
+	case "chart":
+		err = runChart(os.Args[2:])
 	case "doctor":
 		err = runDoctor(ctx, os.Args[2:])
 	case "init":
@@ -69,6 +75,8 @@ Usage:
   ladder-bench plan [--config FILE]     print the grid and the exact commands
   ladder-bench run [--config FILE]      encode, measure and report
   ladder-bench compare A.json B.json    diff two runs, optionally gate on a regression
+  ladder-bench export REPORT.json       the ladder as HLS, DASH or JSON
+  ladder-bench chart REPORT.json        the rate-quality curves as SVG
   ladder-bench version
 
 Run 'ladder-bench <command> --help' for the flags of a command.

@@ -238,6 +238,30 @@ these docs shows a ladder total falling while every rung got worse. Rate control
 still hit its targets; what changed is what those bits bought. That is why the
 headline is a BD-rate and not a sum.
 
+## 7. Handing the result on
+
+A ladder that has to be retyped into a packager is a ladder that will eventually
+be retyped wrong, so [`export`](cli.md#export) writes it as a master playlist, a
+DASH adaptation set or JSON.
+
+Two things it will not do. It will not **invent a `CODECS` string**: that carries
+the profile and level the encoder chose, which is not measured here, and a guessed
+one produces a playlist players reject in ways that look like content problems. And
+it will not **invent a `RESOLUTION`**: the width is derived from the reference
+geometry the way `scale=-2:H` derives it, and omitted when there is no geometry to
+derive it from.
+
+What it does declare carefully is the bitrate. An HLS `BANDWIDTH` is a *peak*, and
+the peak of these encodes is the cap they were given — 110% of target — not the
+average they came out at. Both numbers are exported, as `BANDWIDTH` and
+`AVERAGE-BANDWIDTH`, because a packager needs the first and a capacity plan needs
+the second.
+
+[`chart`](cli.md#chart) draws the same measurements as an SVG: one line per
+resolution, the frontier as an envelope over them, the knees ringed and the target
+as a dashed line. The bitrate axis is logarithmic, because a doubling is the same
+decision wherever it happens on the curve.
+
 ## What this does not measure
 
 - **Your audience.** The savings are per-rung and per-quality, not weighted by

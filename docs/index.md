@@ -41,8 +41,15 @@ One static Go binary. No agent, no server, no account: it drives `ffmpeg` and
 ## Install
 
 ```bash
+brew install --cask Allan-Nava/tap/ladder-bench      # macOS and Linuxbrew
 go install github.com/Allan-Nava/ladder-bench/cmd/ladder-bench@latest
 ```
+
+The cask depends on Homebrew's ffmpeg, which is built with libvmaf, so
+`brew install` lands on a setup that can measure instead of one that only prints
+help. It is a cask rather than a formula because what it ships is the released
+binary, not a build from source; a cask whose only artifact is a binary installs
+on Linuxbrew too.
 
 Pre-built binaries are attached to each
 [release](https://github.com/Allan-Nava/ladder-bench/releases), and there is a
@@ -68,6 +75,8 @@ ladder-bench doctor                    # ffmpeg, libvmaf, codecs, input, disk
 ladder-bench plan                      # the exact commands, without running them
 ladder-bench run                       # encode, measure, report
 ladder-bench compare old.json new.json # what changed since last time
+ladder-bench export new.json --format hls   # the ladder, ready to paste
+ladder-bench chart  new.json --out chart.svg
 ```
 
 No real content at hand? A synthetic clip is enough to see the shape of the
@@ -119,4 +128,6 @@ method page, and worth reading before quoting a percentage at anyone.
 - **[The report](output.md)** — how to read each block, and the JSON schema.
 - **[CLI reference](cli.md)** — every command, flag and exit code.
 - **[Docker](docker.md)** — an image with ffmpeg and libvmaf already in it.
+- **[`export` and `chart`](cli.md#export)** — the ladder as HLS, DASH or JSON, and
+  the curves as an SVG.
 - **[In CI](ci.md)** — scheduled runs, caching, job summaries.

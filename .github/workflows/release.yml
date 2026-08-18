@@ -24,3 +24,6 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT (contents:write on Allan-Nava/homebrew-tap) that lets goreleaser
+          # push the cask there. GITHUB_TOKEN cannot: it is scoped to this repo.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

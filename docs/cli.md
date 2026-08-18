@@ -17,7 +17,9 @@ ladder-bench plan    [--config FILE] [--input FILE]
 ladder-bench run     [--config FILE] [--input FILE] [--output FORMAT] [--out FILE]
                      [--concurrency N] [--force] [--verbose] [--quiet]
 ladder-bench compare BASELINE.json CURRENT.json [--output FORMAT] [--out FILE]
-                     [--exit-on-regression] [--threshold PCT]
+                     [--exit-on-regression] [--threshold PCT] [--quiet]
+ladder-bench export  REPORT.json [--format hls|dash|json] [--encoder NAME] [--out FILE]
+ladder-bench chart   REPORT.json [--encoder NAME] [--out FILE]
 ladder-bench version
 ladder-bench help
 ```
@@ -251,6 +253,82 @@ The threshold defaults to `2.0` rather than zero because encoders are not
 bit-exact across runs and rate control lands in a slightly different place each
 time. A gate at zero fails on that noise and gets switched off, which is worse
 than no gate.
+
+## `export`
+
+Writes the recommended ladder as something another system accepts, so nobody
+retypes it. Reads a report — nothing is re-encoded, so exporting is free and can
+be done once per packager.
+
+```bash
+ladder-bench export report.json --format hls > master.m3u8
+ladder-bench export report.json --format dash --out adaptation-set.xml
+ladder-bench export report.json --format json | your-transcoder --ladder -
+```
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--format FORMAT` | `json` | `hls` (master playlist), `dash` (adaptation set fragment), `json`. |
+| `--encoder NAME` | *the only one* | Which encoder's ladder to export. **Required** when the report measured several. |
+| `--out FILE` | *stdout* | Write to a file. |
+
+Every rung carries three bitrates, because they answer different questions:
+
+| | What it is |
+|---|---|
+| `target_kbps` | What the grid asked for. |
+| `peak_kbps` | The cap the encode was given (110% of target), which is what an HLS `BANDWIDTH` or a DASH `bandwidth` has to declare — those attributes are peaks. |
+| `kbps` | What the file measured, exported as `AVERAGE-BANDWIDTH`. |
+
+**`CODECS` is deliberately absent.** It carries the profile and level the encoder
+chose, and this tool does not measure them — it knows the encoder name and the
+bitrate. A guessed codec string produces a playlist players reject in ways that
+look like content problems, so the attribute is left out and the export says how
+to read the real one off an encode. The DASH fragment carries `codecs="TODO"` for
+the same reason: a fragment that will not paste in is no use either.
+
+`RESOLUTION` is derived from the reference geometry the way `scale=-2:H` derives
+it — the nearest even width that preserves the aspect ratio. When the report has
+no geometry to derive it from, the attribute is **omitted rather than invented**.
+
+Rungs are identified as `<height>p_<target>k`, not by height alone: a recommended
+ladder can hold two rungs at the same resolution, and two playlist entries
+pointing at one URI is a playlist players cannot use.
+
+A ladder exported from a run that never reached `target_vmaf` is still a ladder,
+and every format says so where somebody about to ship it will see it.
+
+## `chart`
+
+Writes the rate-quality curves as an SVG, for a pull request or a wiki page.
+
+```bash
+ladder-bench chart report.json --out chart.svg
+```
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--encoder NAME` | *the only one* | Which encoder to chart. **Required** when the report measured several. |
+| `--out FILE` | *stdout* | Write to a file. |
+
+One line per resolution, the [efficient frontier](method.md#4-the-analysis) drawn
+over them as a thick envelope, the [knees](output.md#saturation) ringed, and
+`target_vmaf` as a dashed line — which answers "does this grid get there" at a
+glance.
+
+Three things about the picture are deliberate:
+
+- **The bitrate axis is logarithmic**, because that is how bitrate is read: the
+  step from 500k to 1000k is the same decision as the one from 3000k to 6000k, and
+  both span the same distance.
+- **Nothing is painted behind it.** An SVG that paints its own white background
+  reads as a hole in a dark README. The colours are mid-tones that work on either.
+- **The provenance is on the chart**: the source, the config fingerprint and the
+  timestamp. A picture travels further than the report it came from, and a curve
+  with no idea what measured it is decoration.
+
+It is hand-written SVG — no dependency, no template, and no rendering step to
+install.
 
 ## `version`
 

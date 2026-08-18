@@ -13,7 +13,7 @@ Roadmap a milestone. **M1** è la v0.1 (fatta): misurare una griglia e leggerne 
 - [x] **LB-5 — Comandi di sicurezza**: `doctor` (ffmpeg, libvmaf, codec, input, work_dir), `plan` (i comandi esatti senza eseguirli), `init` (config commentata). _(v0.1.0)_
 - [x] **LB-6 — Resume**: i punti già misurati si riusano, `--force` li rifà. Il nome del reference contiene il taglio. _(v0.1.0)_
 
-## M2 — Rendere il risultato difendibile (~v0.2)
+## M2 — Rendere il risultato difendibile ✅
 
 - [x] **LB-7 — BD-rate**: differenza di bitrate a parità di qualità fra due encoder/preset sull'intervallo comune (Bjøntegaard). È il numero che si porta in una discussione "vale la pena passare ad AV1?". _(v0.2.0)_
 - [x] **LB-8 — Metriche affiancate**: PSNR e SSIM insieme a VMAF nello stesso passaggio (`libvmaf` le espone come feature), più il VMAF **harmonic mean** già letto ma non ancora mostrato — è la colonna che smaschera i clip con pochi secondi rotti. _(v0.3.0)_
@@ -22,13 +22,14 @@ Roadmap a milestone. **M1** è la v0.1 (fatta): misurare una griglia e leggerne 
 - [x] **LB-11 — Riproducibilità**: nel report le versioni di ffmpeg/libvmaf/encoder e l'hash della config, così un run vecchio si può replicare o scartare consapevolmente. _(v0.5.0)_
 - [x] **LB-21 — Coda di stderr più lunga sul punto rotto**: `tail(stderr, 8)` taglia via la riga della libreria dell'encoder, che è dove sta la causa vera; sopra restano solo le otto righe di cascata di ffmpeg. Visto dal vivo con SVT-AV1: `Svt[error]: Max Bitrate only supported with CRF mode` finiva appena fuori dalla finestra. _(v0.5.0)_
 
-## M3 — Portarlo dove si decide (~v0.3)
+## M3 — Portarlo dove si decide ✅
 
 - [x] **LB-12 — `compare` fra run**: due file JSON → cosa è cambiato (curve, ladder, frontiera). È il modo di accorgersi che un aggiornamento di ffmpeg ha spostato la qualità. _(v0.7.0)_
 - [x] **LB-13 — Gate CI**: `--exit-on-regression` con soglia, per far fallire una pipeline quando la ladder consigliata peggiora rispetto a un baseline committato. _(v0.7.0)_
-- [ ] **LB-14 — Export ladder**: la ladder consigliata come snippet pronto (HLS master playlist, DASH adaptation set, JSON per il transcoder) invece di una tabella da ricopiare.
+- [x] **LB-14 — Export ladder**: la ladder consigliata come snippet pronto (HLS master playlist, DASH adaptation set, JSON per il transcoder) invece di una tabella da ricopiare. _(v0.8.0)_
 - [x] **LB-22 — Immagine Docker**: `ghcr.io/allan-nava/ladder-bench` con ffmpeg+libvmaf dentro, multi-arch, utente non root, `/work` come workdir. Toglie di mezzo il pezzo difficile del setup: libvmaf è un'opzione di build e **nessun pacchetto di distribuzione la abilita**. _(v0.4.0)_
-- [ ] **LB-15 — Grafico**: SVG della curva rate-quality con la frontiera evidenziata, allegabile a una PR. Nessuna dipendenza: SVG scritto a mano.
+- [x] **LB-24 — Tap Homebrew**: `brew install --cask Allan-Nava/tap/ladder-bench`, generato da GoReleaser a ogni tag `v*` non prerelease. Cask e non formula: `brews:` è deprecato in GoReleaser v2 e quello che si spedisce è il binario già compilato, non un build da sorgente. Il cask **dipende da ffmpeg**, così l'install atterra su un ffmpeg con libvmaf invece che su un binario che sa solo stampare l'help. _(v0.8.0)_
+- [x] **LB-15 — Grafico**: SVG della curva rate-quality con la frontiera evidenziata, allegabile a una PR. Nessuna dipendenza: SVG scritto a mano. _(v0.8.0)_
 
 ## M4 — Più domini (~v0.4)
 

@@ -41,11 +41,14 @@ One static Go binary. No agent, no server, no account. It drives `ffmpeg` and
 ## Install
 
 ```bash
+brew install --cask Allan-Nava/tap/ladder-bench      # macOS and Linuxbrew
 go install github.com/Allan-Nava/ladder-bench/cmd/ladder-bench@latest
 ```
 
-Requires an **ffmpeg built with libvmaf** (`--enable-libvmaf`; Homebrew's
-ffmpeg has it). `ladder-bench doctor` tells you if yours does.
+The cask brings **ffmpeg** with it, and Homebrew's ffmpeg is built with
+**libvmaf** — the one build option this tool cannot work around. With `go
+install` you supply your own ffmpeg; either way `ladder-bench doctor` says which
+one is first on your PATH and whether it can measure at all.
 
 Or skip that part entirely — the container image ships ffmpeg, ffprobe and the
 CLI together:
@@ -69,6 +72,8 @@ ladder-bench doctor                    # ffmpeg, libvmaf, codecs, input, disk
 ladder-bench plan                      # the exact commands, without running them
 ladder-bench run                       # encode, measure, report
 ladder-bench compare old.json new.json # what changed since last time
+ladder-bench export new.json --format hls   # the ladder, ready to paste
+ladder-bench chart  new.json --out chart.svg
 ```
 
 `--output markdown` produces a report for a PR or a wiki page; `--output json`
@@ -154,6 +159,27 @@ bits for the same measured quality, or when the grid stopped reaching the target
 it used to. It refuses to judge two runs of different experiments — the config
 fingerprint has to match — because a green build resting on a comparison that was
 never made is worse than no gate.
+
+## Handing it on
+
+The ladder goes out as a master playlist, a DASH adaptation set or JSON, so nobody
+retypes it into a packager:
+
+```
+#EXT-X-STREAM-INF:BANDWIDTH=6600000,AVERAGE-BANDWIDTH=6159651,RESOLUTION=1920x1080
+1080p_6000k.m3u8
+```
+
+`BANDWIDTH` is the cap the encode was given, `AVERAGE-BANDWIDTH` what the file
+measured — a playlist attribute is a peak, and the two answer different questions.
+`CODECS` is **deliberately absent**: it carries the profile and level the encoder
+chose, which this tool does not measure, and a guessed one produces a playlist
+players reject in ways that look like content problems.
+
+`ladder-bench chart` draws the curves as a hand-written SVG — one line per
+resolution, the frontier as an envelope, the knees ringed, the target dashed, and
+the bitrate axis logarithmic because a doubling is the same decision wherever it
+happens.
 
 ## How it measures
 

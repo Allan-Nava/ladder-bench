@@ -382,6 +382,23 @@ computed — not because there was nothing to save.
 | `anchor_points`, `test_points` | number | How many measurements backed each curve. |
 | `note` | string | Why no figure was produced. When it is set, `rate_pct` is `0` because nothing was computed. |
 
+## The exported ladder
+
+[`export`](cli.md#export) writes a different document: the recommended ladder
+alone, in the shape another system accepts. In `json`:
+
+| Field | Type | What it is |
+|---|---|---|
+| `encoder`, `codec`, `preset` | string | Which encoder's ladder this is. |
+| `config_sha256`, `generated` | string | The run behind it, so a playlist in production can be traced to the measurement. |
+| `target_vmaf`, `target_reached` | | What the top rung aimed at, and whether the grid got there. A ladder from a run that missed its target is still a ladder — it is just not the one that was asked for, and every format says so. |
+| `rungs` | array | Best first, the order a master playlist is usually written in. |
+
+**A rung**: `height`, `width` (derived, absent when there is no geometry to derive
+it from), `target_kbps` (what the grid asked for), `peak_kbps` (the cap the encode
+was given, which is what a playlist has to declare), `kbps` (what the file
+measured) and `vmaf`.
+
 ## The comparison report
 
 [`compare`](cli.md#compare) renders in the same three formats, over a different
