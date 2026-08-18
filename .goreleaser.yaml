@@ -57,6 +57,15 @@ homebrew_casks:
     # in as a dependency is what makes `brew install` land on something that can
     # actually measure. A hand-built ffmpeg earlier on PATH still wins at run
     # time — `ladder-bench doctor` prints which one it found.
+    #
+    # Kept as `dependencies:` even though GoReleaser renders it as a multi-line
+    # array that `brew style` flags three times (both brackets misindented, plus a
+    # missing blank line above the stanza). The alternative, a `custom_block` with
+    # a one-line `depends_on`, is emitted *before* `version` — which puts every
+    # stanza after it out of order and turns 3 offences into 13. All of them are
+    # autocorrectable, and every GoReleaser-generated cask in the tap already
+    # carries the same class of offence, so the fix belongs there: a `.rubocop.yml`
+    # or a `brew style --fix` step, not a worse cask from here.
     dependencies:
       - formula: ffmpeg
     caveats: |
@@ -70,11 +79,18 @@ homebrew_casks:
     # com.apple.quarantine the first run dies with "cannot be opened because the
     # developer cannot be verified", and nothing in that message says the problem
     # was Gatekeeper rather than ladder-bench.
+    #
+    # Guarded on OS.mac? and not on whether /usr/bin/xattr answers. Two reasons:
+    # quarantine is a macOS concept, so on Linuxbrew there is nothing to strip and
+    # the binary is simply absent; and `if system_command ...` does not guard
+    # anything — it returns a SystemCommand::Result, which is truthy whatever the
+    # exit status was, so the condition is always true.
     hooks:
       post:
         install: |
-          if system_command "/usr/bin/xattr", args: ["-h"], print_stderr: false
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/ladder-bench"]
+          if OS.mac?
+            system_command "/usr/bin/xattr",
+                           args: ["-dr", "com.apple.quarantine", "#{staged_path}/ladder-bench"]
           end
     # "auto" = publish on a normal tag, skip on a prerelease. Otherwise a
     # v1.0.0-rc.1 tag would push its cask to the tap and `brew install` would

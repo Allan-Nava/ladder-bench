@@ -2,6 +2,18 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/it/1.1.0/), versioni [SemVer](https://semver.org/lang/it/).
 
+## 0.8.2
+
+### Corretto
+
+- **Il guard del postflight del cask non guardava niente.** Era `if system_command "/usr/bin/xattr", args: ["-h"], print_stderr: false`, e in Ruby `system_command` restituisce un `SystemCommand::Result`: un oggetto, quindi **sempre truthy**, qualunque sia l'exit status. La condizione era vera in ogni caso, e su Linuxbrew — dove `/usr/bin/xattr` non esiste e la chiamata solleva un errore invece di tornare falsa — non proteggeva nemmeno il caso per cui era stata scritta.
+
+  Ora è `if OS.mac?`, che è anche la condizione giusta di per sé: la quarantine è un concetto macOS, e su Linux non c'è niente da togliere. Il workflow `Brew test` gira solo su runner macOS, quindi continua ad asserire che l'attributo sia sparito.
+
+- **Documentato perché `dependencies:` resta com'è**, dopo averlo misurato. GoReleaser lo rende come array multi-riga che `brew style` segnala tre volte (entrambe le parentesi mal indentate, più la riga vuota mancante sopra la stanza). L'alternativa — un `custom_block` con un `depends_on` su una riga — viene emessa **prima di `version`**, il che manda fuori ordine ogni stanza successiva e trasforma 3 rilievi in 13. Verificato generando il cask in locale e passandolo a `brew style` in un tap di prova.
+
+  Le 8 segnalazioni rimaste sono tutte `[Correctable]`, e cinque di esse le produce il template di GoReleaser per **qualunque** cask: `segcheck.rb`, che non ha `dependencies:`, ne ha le stesse cinque. Il posto dove si risolve è quindi il tap, non questo repository: `brew style --cask <tap> --fix` le corregge tutte e otto e lascia Ruby valido — verificato, incluso il fatto che riordinando `on_intel`/`on_arm` tiene ogni `sha256` con la sua `url`.
+
 ## 0.8.1
 
 ### Corretto
