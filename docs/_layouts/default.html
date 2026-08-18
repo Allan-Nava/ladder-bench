@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="{{ site.lang | default: 'en' }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% if page.url == '/' %}{{ site.title }} — {{ site.tagline }}{% else %}{{ page.title }} · {{ site.title }}{% endif %}</title>
+<meta name="description" content="{{ page.description | default: site.description | strip_newlines }}">
+<link rel="canonical" href="{{ page.url | absolute_url }}">
+<!-- The favicon is the logo file, not a hand-drawn copy of it inlined here: a
+     second drawing of the mark is a second thing to keep in step, and a stale
+     favicon has no symptom other than looking slightly wrong forever. -->
+<link rel="icon" href="{{ '/assets/logo.svg' | relative_url }}">
+<link rel="stylesheet" href="{{ '/assets/style.css' | relative_url }}">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <a class="brand" href="{{ '/' | relative_url }}">
+    <img class="mark" src="{{ '/assets/logo.svg' | relative_url }}" alt="" width="64" height="64">
+    ladder&#8209;bench
+  </a>
+  <span class="tagline">{{ site.tagline }}</span>
+  <a class="repo" href="https://github.com/{{ site.repository }}">GitHub&nbsp;&rarr;</a>
+</header>
+
+<div class="shell">
+  {%- comment -%}
+  The sidebar is built from the pages that declare a nav_order, so adding a
+  page to the site is adding a file with front matter — never editing a list
+  in two places.
+  {%- endcomment -%}
+  {%- assign nav = site.pages | where_exp: "p", "p.nav_order" | sort: "nav_order" -%}
+  <nav class="side" aria-label="Documentation">
+    <p class="side-heading">Documentation</p>
+    <ul>
+      {%- for p in nav %}
+      <li>
+        <a href="{{ p.url | relative_url }}"{% if p.url == page.url %} aria-current="page"{% endif %}>{{ p.title }}</a>
+        {%- if p.nav_blurb %}<span class="blurb">{{ p.nav_blurb }}</span>{% endif -%}
+      </li>
+      {%- endfor %}
+    </ul>
+    <p class="side-heading">Repository</p>
+    <ul>
+      <li><a href="https://github.com/{{ site.repository }}/blob/main/CHANGELOG.md">Changelog</a></li>
+      <li><a href="https://github.com/{{ site.repository }}/blob/main/BACKLOG.md">Backlog</a></li>
+      <li><a href="https://github.com/{{ site.repository }}/releases">Releases</a></li>
+    </ul>
+  </nav>
+
+  <main id="main">
+    {{ content }}
+    <p class="edit"><a href="https://github.com/{{ site.repository }}/blob/main/docs/{{ page.path }}">Edit this page on GitHub</a></p>
+  </main>
+</div>
+
+<footer class="foot">
+  <p>ladder-bench — MIT &copy; Allan Nava. Built from the Markdown in
+  <a href="https://github.com/{{ site.repository }}/tree/main/docs"><code>docs/</code></a>,
+  with no theme and no dependency.</p>
+</footer>
+</body>
+</html>

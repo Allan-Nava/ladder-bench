@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="ladder-bench">
+  <title>ladder-bench</title>
+  <!--
+    The mark is the report: four measured rungs (the pale bars), the rate-quality
+    curve they trace, and the marked knee past which more bits buy nothing. The
+    bar tops step 12, 6 and 2.5 units, so the saturation is in the geometry
+    rather than implied by a caption.
+
+    Deliberate constraints, so this one file serves every size:
+      - the curve is a monotone cubic through the bar tops, not a freehand arc —
+        a curve that dips between two measured points draws a claim the tool
+        would never make;
+      - no text, so nothing depends on a font being installed;
+      - white on emerald only, so it reads on a light README, a dark one, and an
+        avatar, with no second file per theme.
+  -->
+  <defs>
+    <linearGradient id="lb-tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#34d399"/>
+      <stop offset="1" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#lb-tile)"/>
+  <!-- The chart is nudged up so the tile is not bottom-heavy: a saturating curve
+       leaves its empty quadrant at the top left, and centring the geometry
+       instead of the ink puts all of that slack under the baseline. -->
+  <g transform="translate(0 -2.5)">
+  <g fill="#ffffff">
+    <g opacity="0.4">
+      <rect x="13.5" y="44" width="6.5" height="8" rx="1.5"/>
+      <rect x="24" y="32" width="6.5" height="20" rx="1.5"/>
+      <rect x="34.5" y="26" width="6.5" height="26" rx="1.5"/>
+      <rect x="45" y="23.5" width="6.5" height="28.5" rx="1.5"/>
+    </g>
+    <rect x="11" y="52.6" width="42" height="1.8" rx="0.9" opacity="0.55"/>
+  </g>
+  <path d="M16.75 44C20.25 40 23.75 35 27.25 32C30.75 29 34.25 27.42 37.75 26C41.25 24.58 44.75 24.33 48.25 23.5"
+        fill="none" stroke="#ffffff" stroke-width="2.8" stroke-linecap="round"/>
+  <circle cx="37.75" cy="26" r="3.9" fill="#ffffff"/>
+  <circle cx="37.75" cy="26" r="1.6" fill="#059669"/>
+  </g>
+</svg>

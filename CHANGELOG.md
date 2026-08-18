@@ -2,6 +2,28 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/it/1.1.0/), versioni [SemVer](https://semver.org/lang/it/).
 
+## 0.2.1
+
+Solo documentazione e sito: il binario è identico a 0.2.0.
+
+### Aggiunto
+
+- **Sito di documentazione su GitHub Pages** — <https://allan-nava.github.io/ladder-bench/>. Le pagine sono **gli stessi file Markdown in `docs/`**, non una seconda copia: il sito li rende, e `.github/workflows/pages.yml` lo ripubblica a ogni push su `main` che tocca `docs/`. Niente tema e niente Gemfile — `docs/_config.yml`, `docs/_layouts/default.html` e `docs/assets/style.css` sono tutta la macchina, scritti a mano: un tema remoto è una versione in più che può muoversi sotto una modifica ai doc e rompere una pagina che nessuno ha toccato. La sidebar si costruisce dal front matter delle pagine, quindi **aggiungere una pagina è aggiungere un file** e non c'è nessuna lista di navigazione da tenere in pari altrove. I link fra pagine restano Markdown relativo, così funzionano identici su github.com e sul sito.
+
+- **`docs/output.md` — il report, blocco per blocco.** Ogni colonna della tabella delle misure, ogni frase che la saturazione può stampare (`flattens at`, `already flat`, `still climbing`, `not enough points to tell`) e cosa ciascuna dice di fare alla griglia, come si legge il confronto con la ladder attuale e ogni motivo per cui un rung o un BD-rate può rifiutare di dare un numero. In fondo lo **schema JSON completo**, campo per campo: era l'unico formato di output che non fosse documentato da nessuna parte, ed è quello che un grafico o un archivio devono leggere.
+
+- **`docs/cli.md` — ogni comando e ogni flag.** `init`, `doctor`, `plan`, `run`, `version`: default, cosa fa ciascun flag, cosa finisce nel work dir e cosa sopravvive alla pulizia (il log VMAF sì, l'encode no — il log *è* la misura), quando serve `--force`, cosa lascia un Ctrl-C, e i codici di uscita compreso il `64` di usage.
+
+- **`docs/index.md` — la home del sito**: cosa fa il tool, le quattro risposte che dà, installazione, il primo run in sessanta secondi e la regola che segue sempre (non inventa numeri).
+
+- **Un marchio (`docs/assets/logo.svg`).** È il report disegnato: quattro rung misurati, la curva rate-quality che tracciano e il ginocchio segnato. La curva è una cubica monotona per i vertici delle barre, non un arco a mano libera — una curva che scende fra due punti misurati disegnerebbe un'affermazione che il tool non farebbe mai. Nessun testo (niente da dipendere da un font) e solo bianco su verde, così un file solo serve README chiaro, README scuro, favicon del sito e avatar.
+
+### Modificato
+
+- **`docs/method.md` e `docs/configuration.md`** hanno la sezione BD-rate e la regola dell'ancora (il primo encoder in config) già introdotte in 0.2.0, ora raggiungibili dal sito con anchor stabili.
+- **README**: badge della documentazione e sezione *Documentation* che punta alle pagine pubblicate invece che alla sola cartella.
+- **`CLAUDE.md` / `AGENTS.md`**: regola operativa nuova — *documenta sempre tutto, nello stesso commit*. `docs/` è il sito, quindi ogni cosa user-facing che cambia si aggiorna lì insieme al codice, non dopo.
+
 ## 0.2.0
 
 ### Aggiunto

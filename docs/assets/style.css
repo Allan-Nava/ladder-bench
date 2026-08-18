@@ -1,0 +1,228 @@
+/* Hand-written stylesheet for the ladder-bench documentation site.
+   No framework, no build step: what is here is what the browser gets. */
+
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f6f7f9;
+  --bg-code: #f4f5f7;
+  --fg: #1c2024;
+  --fg-soft: #5b6570;
+  --rule: #e2e5e9;
+  --accent: #0a7f5c;
+  --accent-soft: #10b981;
+  --measure: 46rem;
+  --sidebar: 15rem;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171a;
+    --bg-soft: #1b1f23;
+    --bg-code: #1d2227;
+    --fg: #e6e9ec;
+    --fg-soft: #9aa5b0;
+    --rule: #2b3238;
+    --accent: #3ddc9a;
+    --accent-soft: #10b981;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.65 var(--sans);
+}
+
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { text-decoration-thickness: 2px; }
+
+.skip {
+  position: absolute;
+  left: -9999px;
+}
+.skip:focus {
+  left: 0.5rem; top: 0.5rem;
+  z-index: 10;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+
+/* ---------- top bar ---------- */
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  padding: 0.9rem 1.5rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--bg-soft);
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font: 600 1.05rem/1 var(--mono);
+  color: var(--fg);
+  text-decoration: none;
+}
+/* The mark is sized in em so it tracks the wordmark next to it, and carries its
+   own width/height in the markup so the bar does not reflow once it loads. */
+.brand .mark {
+  width: 1.35em;
+  height: 1.35em;
+  border-radius: 0.3em;
+}
+.tagline { color: var(--fg-soft); font-size: 0.9rem; }
+.repo { margin-left: auto; font-size: 0.9rem; white-space: nowrap; }
+
+/* ---------- layout ---------- */
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar) minmax(0, 1fr);
+  gap: 2.5rem;
+  max-width: calc(var(--sidebar) + var(--measure) + 6rem);
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+.side { font-size: 0.925rem; }
+.side-heading {
+  margin: 1.4rem 0 0.4rem;
+  font: 600 0.72rem/1 var(--sans);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--fg-soft);
+}
+.side-heading:first-child { margin-top: 0.2rem; }
+.side ul { list-style: none; margin: 0; padding: 0; }
+.side li { margin: 0 0 0.15rem; }
+.side a {
+  display: block;
+  padding: 0.28rem 0.6rem;
+  border-radius: 5px;
+  color: var(--fg);
+  text-decoration: none;
+}
+.side a:hover { background: var(--bg-soft); color: var(--accent); }
+.side a[aria-current="page"] {
+  background: var(--bg-soft);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--accent-soft);
+}
+.side .blurb {
+  display: block;
+  padding: 0 0.6rem 0.2rem;
+  color: var(--fg-soft);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+main { min-width: 0; max-width: var(--measure); }
+
+/* ---------- prose ---------- */
+
+h1, h2, h3, h4 { line-height: 1.25; }
+h1 { margin: 0 0 1rem; font-size: 1.95rem; letter-spacing: -0.015em; }
+h2 {
+  margin: 2.6rem 0 0.8rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+  font-size: 1.35rem;
+}
+h3 { margin: 1.9rem 0 0.5rem; font-size: 1.08rem; }
+p, ul, ol, blockquote, table { margin: 0 0 1.05rem; }
+li { margin: 0.3rem 0; }
+li > ul, li > ol { margin: 0.3rem 0; }
+strong { font-weight: 650; }
+
+blockquote {
+  margin-left: 0;
+  padding: 0.1rem 0 0.1rem 1rem;
+  border-left: 3px solid var(--accent-soft);
+  color: var(--fg-soft);
+}
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.2rem 0; }
+
+code {
+  font-family: var(--mono);
+  font-size: 0.875em;
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+  background: var(--bg-code);
+}
+
+/* Wide code and tables scroll inside their own box: the page body never does. */
+pre {
+  margin: 0 0 1.2rem;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--bg-code);
+  line-height: 1.5;
+}
+pre code { padding: 0; background: none; font-size: 0.84rem; }
+
+.table-scroll, .highlight { overflow-x: auto; }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.92rem;
+}
+th, td {
+  padding: 0.45rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+  vertical-align: top;
+}
+th { font-weight: 650; background: var(--bg-soft); }
+
+img { max-width: 100%; height: auto; }
+
+.edit {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.875rem;
+  color: var(--fg-soft);
+}
+
+.foot {
+  border-top: 1px solid var(--rule);
+  background: var(--bg-soft);
+  padding: 1.25rem 1.5rem;
+  color: var(--fg-soft);
+  font-size: 0.85rem;
+}
+.foot p { max-width: 60rem; margin: 0 auto; }
+
+/* ---------- narrow screens ---------- */
+
+@media (max-width: 52rem) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+    padding: 1.25rem 1.1rem 2.5rem;
+  }
+  .side {
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  .side .blurb { display: none; }
+  .tagline { display: none; }
+  h1 { font-size: 1.6rem; }
+}

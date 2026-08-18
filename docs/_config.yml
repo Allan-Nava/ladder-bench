@@ -1,0 +1,55 @@
+# Jekyll configuration for the GitHub Pages site.
+#
+# There is deliberately no theme: the layout in _layouts/default.html and the
+# stylesheet in assets/style.css are both hand-written, so the site depends on
+# nothing GitHub Pages does not already run. A remote theme is one more version
+# that can move underneath a doc edit and break a page nobody touched.
+#
+# The pages themselves are the same Markdown files this directory has always
+# held, readable on github.com and rendered here — never a second copy.
+
+# No theme: the github-pages gem otherwise defaults to jekyll-theme-primer and
+# ships a stylesheet and a logo this site never references — dead weight, and one
+# more Sass build that can fail on a page nobody edited.
+theme:
+
+title: ladder-bench
+tagline: Measure your ABR encoding ladder instead of inheriting it.
+description: >-
+  Documentation for ladder-bench, a Go CLI that encodes a reference clip across
+  a grid of resolutions and bitrates, scores every point with VMAF, and reports
+  saturation, the efficient frontier, a recommended ABR ladder and the BD-rate
+  between encoders.
+lang: en
+
+url: https://allan-nava.github.io
+baseurl: /ladder-bench
+repository: Allan-Nava/ladder-bench
+
+permalink: pretty
+
+# jekyll-relative-links rewrites the `method.md`-style links these pages use
+# into the URLs the site publishes. Without it every cross-page link would work
+# on github.com and 404 here — the two have to stay the same text.
+plugins:
+  - jekyll-relative-links
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+
+# Every page gets the layout without having to say so in its front matter.
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+
+# README.md is the index github.com shows when browsing this directory; the
+# site's home page is index.md.
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock
+  - vendor

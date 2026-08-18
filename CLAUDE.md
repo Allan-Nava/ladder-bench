@@ -11,6 +11,7 @@
 - **Ogni verifica su ffmpeg reale è manuale e va dichiarata**: la CI non ha libvmaf. Se una modifica tocca il modo in cui si misura, farla girare in locale su un clip vero e dirlo nel messaggio/PR.
 - **Lingua = inglese**: codice, commenti, test e **tutto l'output user-facing** (report, help, errori, config d'esempio). **Eccezione: `CHANGELOG.md` in italiano**, come negli altri repo.
 - **Todo → `BACKLOG.md`** (sorgente unica, id stabili `LB-n`). Niente TODO sparsi nei commenti.
+- **Documenta sempre tutto, nello stesso commit**: `docs/` **è** il sito pubblicato (<https://allan-nava.github.io/ladder-bench/>), quindi ogni cosa user-facing che cambia — un comando, un flag, un campo del report, una soglia, una metrica — si aggiorna lì insieme al codice, non dopo. Le pagine sono l'unica copia: il sito le rende, non le duplica. **Nuova pagina = nuovo file** in `docs/` con front matter `title` / `nav_order` / `nav_blurb` / `description` (niente `:` non quotato dentro `description`), e la sidebar la prende da sola — nessuna lista di navigazione da tenere in pari altrove. I link fra pagine restano Markdown relativo (`method.md`), che funziona sia su github.com sia sul sito; **il testo del link non deve andare a capo** o `jekyll-relative-links` non lo riscrive. I link a file fuori da `docs/` vanno assoluti.
 - **Niente numeri inventati nel report**: se una misura manca, il report lo dice (`outside the measured grid`, `still climbing`). Mai estrapolare una curva rate-quality — sostituire le stime è il motivo per cui esiste il tool.
 
 ## Comandi
@@ -59,5 +60,5 @@ ffmpeg -f lavfi -i "testsrc2=size=1920x1080:rate=25" -t 8 -c:v libx264 -crf 18 -
 
 - Backlog: `BACKLOG.md` (`LB-n`) · Config d'esempio: `cmd/ladder-bench/example.yml` (embedded, **unica copia** — `ladder-bench init` la scrive)
 - CI: `.github/workflows/ci.yml` (fmt/vet/test/lint + govulncheck) · Release: `.github/workflows/release.yml` + `.goreleaser.yaml` sui tag `v*`
-- Documentazione: `docs/` (`configuration.md`, `method.md`, `ci.md`)
+- Documentazione: `docs/` — `index.md` (overview), `configuration.md`, `method.md`, `output.md` (il report + schema JSON), `cli.md`, `ci.md`. Sito: `.github/workflows/pages.yml` renderizza `docs/` con Jekyll a ogni push su `main` che tocca `docs/`. Niente tema e niente Gemfile: `docs/_config.yml`, `docs/_layouts/default.html` e `docs/assets/style.css` sono tutta la macchina, scritti a mano. Per provare il build in locale serve il gem `github-pages` (Jekyll 3.10, lo stesso della CI) e un locale UTF-8: `LANG=en_US.UTF-8 bundle exec jekyll build -s docs -d /tmp/site`
 - Repo affini: `~/projects/github.com/checkfleet`, `nats-lens`, `nomad-lens`, `ansible-vars-lens`

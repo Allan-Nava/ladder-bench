@@ -1,3 +1,11 @@
+---
+title: Configuration
+nav_order: 2
+nav_blurb: Every key of ladder-bench.yml
+description: >-
+  Every key of ladder-bench.yml — the clip, the encoders, the resolution and bitrate grid, the VMAF filter and the analysis thresholds.
+---
+
 # Configuration
 
 `ladder-bench init` writes a commented starting config. This page is the

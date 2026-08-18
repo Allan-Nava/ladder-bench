@@ -1,3 +1,11 @@
+---
+title: In CI
+nav_order: 6
+nav_blurb: Scheduled runs and caching
+description: >-
+  Running ladder-bench on a schedule — what a runner needs, a workflow that posts the report to a job summary, caching a work dir between runs, and the exit codes.
+---
+
 # Running it in CI
 
 ladder-bench is a batch tool, not a service: it fits a scheduled job or a
@@ -68,4 +76,4 @@ libvmaf, a point that could not be encoded or measured). A broken point stops
 the run: a hole in the curve is not a smaller answer, it is a wrong one.
 
 Gating a pipeline on a *regression* — the ladder getting worse against a
-committed baseline — is [LB-13](../BACKLOG.md) and not implemented yet.
+committed baseline — is [LB-13](https://github.com/Allan-Nava/ladder-bench/blob/main/BACKLOG.md) and not implemented yet.

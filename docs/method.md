@@ -1,3 +1,11 @@
+---
+title: Method
+nav_order: 3
+nav_blurb: What it does to a file, and why
+description: >-
+  What ladder-bench does to a file and why each step is the way it is — the lossless reference clip, the capped encodes, the VMAF upscale, and how saturation, the efficient frontier, the recommended ladder and the BD-rate are computed.
+---
+
 # Method
 
 What ladder-bench does to a file, and why each step is the way it is. If you

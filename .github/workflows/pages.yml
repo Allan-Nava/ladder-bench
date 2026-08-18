@@ -1,0 +1,51 @@
+# Publishes docs/ to GitHub Pages: https://allan-nava.github.io/ladder-bench/
+#
+# The site has no theme and no Gemfile — the layout and the stylesheet are in
+# docs/ and hand-written — so this workflow only renders Markdown and uploads
+# the result. Nothing here can drift from the docs; the pages ARE the Markdown
+# files the repository already holds.
+name: Pages
+
+on:
+  push:
+    branches: ["main"]
+    # Docs-only deploys, plus this workflow itself. A code-only commit does not
+    # need to redeploy an unchanged site.
+    paths:
+      - "docs/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and never cancel one in flight: a half-published site is
+# worse than a slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Build with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs
+          destination: ./_site
+      - uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

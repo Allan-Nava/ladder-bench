@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/logo.svg" alt="" width="96" height="96">
+</p>
+
 <h1 align="center">ladder-bench</h1>
 
 <p align="center"><strong>Measure your ABR encoding ladder instead of inheriting it.</strong></p>
@@ -6,6 +10,7 @@
   <a href="https://github.com/Allan-Nava/ladder-bench/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Allan-Nava/ladder-bench/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-10b981"></a>
   <img alt="Go" src="https://img.shields.io/github/go-mod/go-version/Allan-Nava/ladder-bench?color=10b981">
+  <a href="https://allan-nava.github.io/ladder-bench/"><img alt="Documentation" src="https://img.shields.io/badge/docs-allan--nava.github.io-10b981"></a>
 </p>
 
 ---
@@ -145,7 +150,21 @@ faster and is usually good enough for a curve.
 
 ## Documentation
 
-- [`docs/`](docs/) — configuration, method, CI recipes
+**<https://allan-nava.github.io/ladder-bench/>** — the same Markdown that lives
+in [`docs/`](docs/), published as a site.
+
+- [Overview](https://allan-nava.github.io/ladder-bench/) — what it is and the
+  first run
+- [Configuration](https://allan-nava.github.io/ladder-bench/configuration/) —
+  every key of `ladder-bench.yml`
+- [Method](https://allan-nava.github.io/ladder-bench/method/) — what happens to
+  a file and why, and what the numbers do *not* cover
+- [The report](https://allan-nava.github.io/ladder-bench/output/) — every block
+  it prints, and the full JSON schema
+- [CLI reference](https://allan-nava.github.io/ladder-bench/cli/) — every
+  command, flag and exit code
+- [In CI](https://allan-nava.github.io/ladder-bench/ci/) — scheduled runs,
+  caching, job summaries
 - [`BACKLOG.md`](BACKLOG.md) — what is planned, with stable ids
 
 ## License

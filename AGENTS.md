@@ -13,6 +13,7 @@ Questo file definisce le regole operative per gli agent (Copilot, Claude, altri 
 - **Verifiche su ffmpeg reale = manuali e dichiarate**: la CI non ha libvmaf.
 - **Lingua**: codice, commenti, test e output user-facing in **inglese**; `CHANGELOG.md` in italiano.
 - **Todo → `BACKLOG.md`** (id stabili `LB-n`), niente TODO sparsi.
+- **Documenta sempre tutto, nello stesso commit**: `docs/` **è** il sito pubblicato (<https://allan-nava.github.io/ladder-bench/>); ogni cosa user-facing che cambia si aggiorna lì col codice. Nuova pagina = nuovo file con front matter `title`/`nav_order`/`nav_blurb`/`description`; link fra pagine in Markdown relativo, col testo del link **su una riga sola**.
 - **Mai estrapolare o inventare misure**: se un punto manca, il report lo dichiara.
 
 ## Comandi
@@ -36,4 +37,4 @@ Questo file definisce le regole operative per gli agent (Copilot, Claude, altri 
 
 ## Puntatori
 
-`BACKLOG.md` · `CLAUDE.md` (versione estesa di queste regole) · `docs/` · config d'esempio embedded in `cmd/ladder-bench/example.yml`.
+`BACKLOG.md` · `CLAUDE.md` (versione estesa di queste regole) · `docs/` (`index`, `configuration`, `method`, `output`, `cli`, `ci` — pubblicate da `.github/workflows/pages.yml`, senza tema né Gemfile) · config d'esempio embedded in `cmd/ladder-bench/example.yml`.

@@ -18,3 +18,11 @@ cover.out
 
 # graphify knowledge graph: derived from the sources.
 graphify-out/
+
+# A local Jekyll build of the docs site. The published one is built by
+# .github/workflows/pages.yml from the Markdown, never from a committed _site.
+docs/_site/
+docs/.jekyll-cache/
+docs/Gemfile
+docs/Gemfile.lock
+docs/vendor/
