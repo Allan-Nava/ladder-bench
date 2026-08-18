@@ -2,6 +2,37 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/it/1.1.0/), versioni [SemVer](https://semver.org/lang/it/).
 
+## 0.7.0
+
+### Aggiunto
+
+- **`compare` fra due run (LB-12).**
+
+  ```bash
+  ladder-bench compare baseline.json current.json
+  ```
+
+  Un report dice qual è la ladder oggi; la domanda che viene dopo è sempre se è cambiata — un ffmpeg nuovo, un preset nuovo, un'altra settimana di contenuto. La risposta è **la stessa aritmetica del BD-rate puntata sul tempo invece che su un concorrente**: quanto bitrate serve a questo run per la qualità che consegnava il baseline. Negativo costa meno adesso, positivo costa più.
+
+  Perché quello e non i totali, con numeri veri da una verifica: la ladder consigliata è passata da 3160k a **3121k mentre ogni rung peggiorava** (VMAF 95.83 → 91.67 in cima). Il rate control ha centrato i suoi target come prima; è cambiato cosa comprano quei bit. Confrontare le somme avrebbe chiamato la cosa un miglioramento.
+
+  Tre rifiuti che valgono più delle tabelle:
+  - **due run di esperimenti diversi non si confrontano, si dichiarano diversi**. Decide il fingerprint della config: una griglia più larga, un altro target, un clip in più muovono ogni numero senza che niente sia migliorato o peggiorato;
+  - **le coordinate e gli encoder che ha solo un run vengono nominati**, non lasciati cadere;
+  - **una ladder che ha cambiato forma non si appaia rung per rung**: mettere un 1080p contro un 720p perché stanno allo stesso indice inventerebbe un confronto, quindi si mostrano le due ladder affiancate.
+
+- **Gate CI (LB-13).** `--exit-on-regression` esce **2** quando il run è peggiorato, tenuto distinto dall'1 che vuol dire "lo strumento si è rotto": una regressione è un risultato su cui commentare, un fallimento è qualcosa da andare a riparare, e un codice solo per entrambi rende ambigua ogni build rossa.
+
+  Contano due cose, deliberatamente: la ladder **costa più bit a parità di qualità misurata** oltre `--threshold`, oppure **la griglia non raggiunge più `target_vmaf`** mentre il baseline lo raggiungeva — che non è una questione di grado, il run non risponde più alla domanda. Un run che spende più bit e mostra di più non è una regressione.
+
+  La soglia di default è **2%** e non zero: gli encoder non sono bit-exact fra run e il rate control atterra ogni volta in un punto un po' diverso. Un gate a zero fallisce su quel rumore e viene spento, che è peggio di nessun gate.
+
+  E un gate che **non può** stabilire se qualcosa è peggiorato non passa: con i fingerprint diversi esce 1 dicendo di rimisurare il baseline. Una build verde poggiata su un confronto che non è mai stato fatto è peggio di nessun gate.
+
+### Corretto
+
+- **`compare` accetta i flag anche dopo i nomi dei file.** Il package `flag` della standard library si ferma al primo argomento non-flag, quindi `compare a.json b.json --exit-on-regression` leggeva tre file e zero flag — e **il gate non sarebbe mai scattato**. Nessuno scrive i file per ultimi, quindi il parser ora li accetta per primi (`parseInterspersed`, con un test per ognuna delle quattro disposizioni).
+
 ## 0.6.0
 
 M2 chiusa: il risultato è difendibile.

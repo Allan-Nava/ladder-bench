@@ -68,6 +68,7 @@ $EDITOR ladder-bench.yml               # point `input:` at real content
 ladder-bench doctor                    # ffmpeg, libvmaf, codecs, input, disk
 ladder-bench plan                      # the exact commands, without running them
 ladder-bench run                       # encode, measure, report
+ladder-bench compare old.json new.json # what changed since last time
 ```
 
 `--output markdown` produces a report for a PR or a wiki page; `--output json`
@@ -129,6 +130,30 @@ over the union of the two, and a pair of curves that barely overlap is declined
 rather than stretched to meet. Curves with four or more points get the classic
 least-squares cubic fit; shorter ones are interpolated between the measurements
 and the report says so, because a cubic through three points is not a fit.
+
+## Watching it change
+
+Two reports and one command say what a month cost you:
+
+```
+  bitrate for the quality the baseline delivered — negative is cheaper now
+    frontier  +28.7%  over VMAF 79.9–91.7  piecewise linear
+
+  recommended ladder
+    720p  2507k → 2494k  -0.5%  VMAF 95.83 → 91.67
+    720p  653k → 627k    -4.0%  VMAF 79.87 → 76.11
+    total 3160k → 3121k
+```
+
+The ladder total went **down** while every rung got worse — rate control still hit
+its targets, what changed is what those bits bought. That is why the headline is a
+BD-rate and not a sum.
+
+`--exit-on-regression` turns it into a CI gate: exit `2` when the ladder needs more
+bits for the same measured quality, or when the grid stopped reaching the target
+it used to. It refuses to judge two runs of different experiments — the config
+fingerprint has to match — because a green build resting on a comparison that was
+never made is worse than no gate.
 
 ## How it measures
 

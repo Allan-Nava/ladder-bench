@@ -30,6 +30,10 @@ grid of (resolution × bitrate × encoder) points, scores every point with
    against the codec you ship today, measured on your content instead of quoted
    from a press release.
 
+And once you have two reports, [`compare`](cli.md#compare) says what changed
+between them in the same currency — how much bitrate this run needs for the
+quality the last one delivered — and can fail a pipeline on it.
+
 One static Go binary. No agent, no server, no account: it drives `ffmpeg` and
 `ffprobe` as subprocesses, and every command it runs can be
 [printed before it runs](cli.md#plan).
@@ -63,6 +67,7 @@ $EDITOR ladder-bench.yml               # point `input:` at real content
 ladder-bench doctor                    # ffmpeg, libvmaf, codecs, input, disk
 ladder-bench plan                      # the exact commands, without running them
 ladder-bench run                       # encode, measure, report
+ladder-bench compare old.json new.json # what changed since last time
 ```
 
 No real content at hand? A synthetic clip is enough to see the shape of the

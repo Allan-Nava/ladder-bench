@@ -382,6 +382,37 @@ computed — not because there was nothing to save.
 | `anchor_points`, `test_points` | number | How many measurements backed each curve. |
 | `note` | string | Why no figure was produced. When it is set, `rate_pct` is `0` because nothing was computed. |
 
+## The comparison report
+
+[`compare`](cli.md#compare) renders in the same three formats, over a different
+shape. In `json`:
+
+| Field | Type | What it is |
+|---|---|---|
+| `baseline`, `current` | object | How each run is identified: `path`, `version`, `generated`, `input`, `environment`. |
+| `comparable` | bool | Whether the two runs measured the same experiment, i.e. whether their config fingerprints match. **When false, nothing else here answers "did this get worse"** — and the gate fails rather than passing. |
+| `encoders` | array | One entry per encoder both runs measured. |
+| `only_in_baseline`, `only_in_current` | array | Encoders one run has and the other does not. Named rather than dropped. |
+| `regressions` | array | `encoder`, `reason`, and `value`/`threshold` for the ones that are a matter of degree. Empty when nothing regressed, and always empty when `comparable` is false. |
+| `threshold` | number | The BD-rate percent the gate allowed. |
+
+**An encoder entry**: `bd_rate` (the headline — bitrate for the baseline's
+quality, positive means more expensive) and `bd_rate_by_height`, both the same
+shape as a [BD figure](#bd_rates); `points` (per coordinate: `baseline_kbps`,
+`kbps`, `baseline_vmaf`, `vmaf`, or a `note` when only one run measured it);
+`ladder` (per rung, when the shapes match) or `ladder_changed` with
+`baseline_ladder` and `current_ladder`; `baseline_target_reached` and
+`target_reached`; and the two ladder totals.
+
+```bash
+# did anything regress, and why?
+jq -r '.regressions[]? | "\(.encoder): \(.reason)"' comparison.json
+
+# the headline per encoder, only if the runs are actually comparable
+jq -r 'if .comparable then .encoders[] | "\(.encoder): \(.bd_rate.rate_pct)%"
+       else "incomparable: the config fingerprints differ" end' comparison.json
+```
+
 ### Reading it from a shell
 
 ```bash

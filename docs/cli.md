@@ -11,11 +11,13 @@ description: >-
 # CLI reference
 
 ```
-ladder-bench init   [--out FILE] [--force]
-ladder-bench doctor [--config FILE] [--input FILE]
-ladder-bench plan   [--config FILE] [--input FILE]
-ladder-bench run    [--config FILE] [--input FILE] [--output FORMAT] [--out FILE]
-                    [--concurrency N] [--force] [--verbose] [--quiet]
+ladder-bench init    [--out FILE] [--force]
+ladder-bench doctor  [--config FILE] [--input FILE]
+ladder-bench plan    [--config FILE] [--input FILE]
+ladder-bench run     [--config FILE] [--input FILE] [--output FORMAT] [--out FILE]
+                     [--concurrency N] [--force] [--verbose] [--quiet]
+ladder-bench compare BASELINE.json CURRENT.json [--output FORMAT] [--out FILE]
+                     [--exit-on-regression] [--threshold PCT]
 ladder-bench version
 ladder-bench help
 ```
@@ -178,6 +180,78 @@ Svt[error]: Instance 1: Max Bitrate only supported with CRF mode
 
 Without that, the cause is the first thing a fixed-size tail throws away.
 
+## `compare`
+
+Diffs two JSON reports: what the change cost, point by point and rung by rung.
+
+```bash
+ladder-bench run --output json --out current.json
+ladder-bench compare baseline.json current.json
+```
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--output FORMAT` | `text` | `text`, `markdown` or `json`. |
+| `--out FILE` | *stdout* | Write the comparison to a file. |
+| `--exit-on-regression` | `false` | Exit `2` when the current run regressed. |
+| `--threshold PCT` | `2.0` | BD-rate percent a run may drift by before the gate fires. |
+| `--quiet` | `false` | Apply the gate without writing the comparison. For the second call in a pipeline, which wants only the exit code. |
+
+Flags may come before, after or between the two file names.
+
+### The headline is a BD-rate
+
+The first thing the comparison reports is **how much bitrate this run needs for
+the quality the baseline delivered** — the same arithmetic as the
+[cross-encoder BD-rate](method.md#4-the-analysis), pointed at time instead of at
+a competitor. Negative is cheaper now; positive costs more.
+
+That is the number to read, and the reason is visible in a real comparison:
+
+```
+  bitrate for the quality the baseline delivered — negative is cheaper now
+    frontier  +28.7%  over VMAF 79.9–91.7  piecewise linear
+
+  recommended ladder
+    720p  2507k → 2494k  -0.5%  VMAF 95.83 → 91.67
+    720p  653k → 627k    -4.0%  VMAF 79.87 → 76.11
+    total 3160k → 3121k
+```
+
+The ladder total went **down** while every rung got worse. Rate control still hit
+its targets; what changed is what those bits bought. Comparing totals would have
+called this an improvement.
+
+### What it refuses to compare
+
+A comparison is only meaningful between two runs of the **same experiment**, so
+`compare` checks the [config fingerprint](method.md#5-what-the-report-records-about-itself)
+first. When the fingerprints differ it says so before anything else, and
+`--exit-on-regression` **fails rather than passing**: a wider grid, another
+target or one more clip move every number without anything having got better or
+worse, and reporting "no regression" there would be a green build resting on a
+comparison that was never made.
+
+Grid coordinates and encoders that only one run has are named rather than
+dropped, and a recommended ladder whose shape changed is shown as two ladders
+instead of being paired rung by rung — pairing a 1080p rung against a 720p one
+because they sit at the same index would invent a comparison.
+
+### What counts as a regression
+
+Two things, deliberately:
+
+- the ladder got **more expensive at equal measured quality**, by more than
+  `--threshold`. Quality-normalised on purpose: a run that spends more bits and
+  shows more for them has not regressed;
+- the grid **stopped reaching `target_vmaf`** when the baseline reached it. That
+  is not a matter of degree — the run can no longer answer the question.
+
+The threshold defaults to `2.0` rather than zero because encoders are not
+bit-exact across runs and rate control lands in a slightly different place each
+time. A gate at zero fails on that noise and gets switched off, which is worse
+than no gate.
+
 ## `version`
 
 ```bash
@@ -191,12 +265,11 @@ time; a `go build` from source reports `dev`.
 
 | Code | Meaning |
 |---|---|
-| `0` | The command completed. For `doctor`, every check passed. |
-| `1` | A real failure: unusable config, missing ffmpeg or libvmaf, a failed check, a point that could not be encoded or measured, an unwritable report. |
+| `0` | The command completed. For `doctor`, every check passed; for `compare --exit-on-regression`, nothing regressed. |
+| `1` | A real failure: unusable config, missing ffmpeg or libvmaf, a failed check, a point that could not be encoded or measured, an unwritable report, or a gate that could not be applied because the two runs measured different experiments. |
+| `2` | `compare --exit-on-regression` found a regression. The reasons go to stderr as well as into the report. |
 | `64` | Usage error — no subcommand, or one that does not exist. Usage goes to stderr. |
 
-Gating a pipeline on a *regression* — the recommended ladder getting worse
-against a committed baseline — is
-[LB-13](https://github.com/Allan-Nava/ladder-bench/blob/main/BACKLOG.md) and not
-implemented yet. Today a pipeline can fail on a broken run, not on a worse
-result.
+`2` is kept apart from `1` on purpose: a regression is a result worth posting a
+comment about, and a failure is something to go and fix. One code for both makes
+every red build ambiguous.

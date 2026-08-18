@@ -24,8 +24,8 @@ Roadmap a milestone. **M1** è la v0.1 (fatta): misurare una griglia e leggerne 
 
 ## M3 — Portarlo dove si decide (~v0.3)
 
-- [ ] **LB-12 — `compare` fra run**: due file JSON → cosa è cambiato (curve, ladder, frontiera). È il modo di accorgersi che un aggiornamento di ffmpeg ha spostato la qualità.
-- [ ] **LB-13 — Gate CI**: `--exit-on-regression` con soglia, per far fallire una pipeline quando la ladder consigliata peggiora rispetto a un baseline committato.
+- [x] **LB-12 — `compare` fra run**: due file JSON → cosa è cambiato (curve, ladder, frontiera). È il modo di accorgersi che un aggiornamento di ffmpeg ha spostato la qualità. _(v0.7.0)_
+- [x] **LB-13 — Gate CI**: `--exit-on-regression` con soglia, per far fallire una pipeline quando la ladder consigliata peggiora rispetto a un baseline committato. _(v0.7.0)_
 - [ ] **LB-14 — Export ladder**: la ladder consigliata come snippet pronto (HLS master playlist, DASH adaptation set, JSON per il transcoder) invece di una tabella da ricopiare.
 - [x] **LB-22 — Immagine Docker**: `ghcr.io/allan-nava/ladder-bench` con ffmpeg+libvmaf dentro, multi-arch, utente non root, `/work` come workdir. Toglie di mezzo il pezzo difficile del setup: libvmaf è un'opzione di build e **nessun pacchetto di distribuzione la abilita**. _(v0.4.0)_
 - [ ] **LB-15 — Grafico**: SVG della curva rate-quality con la frontiera evidenziata, allegabile a una PR. Nessuna dipendenza: SVG scritto a mano.

@@ -87,11 +87,61 @@ Point `work_dir` at a cached directory and a re-run only measures what changed
 - **Changing `clip:` is safe**: the reference file name carries the cut, so a
   new cut is a new file.
 
+## Failing on a regression
+
+A scheduled report tells you what the ladder is. A **gate** tells you when it
+changed for the worse, which is the only part a pipeline can act on by itself.
+
+Commit a baseline report next to the config, and compare against it:
+
+```yaml
+      - name: ladder-bench
+        run: |
+          lb() {
+            docker run --rm -v "$PWD:/work" --user "$(id -u):$(id -g)" "$LB" "$@"
+          }
+          lb run --config bench/ladder-bench.yml --input clip.mp4 \
+            --output json --out current.json --quiet
+          lb compare bench/baseline.json current.json --output markdown \
+            >> "$GITHUB_STEP_SUMMARY"
+          lb compare bench/baseline.json current.json --exit-on-regression --quiet
+```
+
+The second `compare` costs nothing — it re-reads two JSON files — and its exit
+code is what fails the job: `2` for a regression, `1` if the gate could not be
+applied at all. See [`compare`](cli.md#compare) for what counts as one.
+
+Three things make this work rather than annoy:
+
+- **The baseline is committed.** It is a file in the repository, so refreshing it
+  is a reviewed change — which is exactly what accepting a new normal should be.
+- **The config fingerprint is checked first.** Editing the config invalidates the
+  baseline, and the gate then *fails* rather than passing on a comparison it
+  could not make. That is the signal to re-measure the baseline in the same pull
+  request that changed the config.
+- **The threshold is not zero.** Encoders are not bit-exact across runs; a gate at
+  zero fails on noise and gets switched off.
+
+Distinguishing the two failure codes is worth the extra line:
+
+```yaml
+      - name: Gate
+        run: |
+          set +e
+          docker run --rm -v "$PWD:/work" --user "$(id -u):$(id -g)" "$LB" \
+            compare bench/baseline.json current.json --exit-on-regression
+          case $? in
+            0) echo "no regression" ;;
+            2) echo "::error::the ladder regressed against the committed baseline"; exit 1 ;;
+            *) echo "::error::the gate could not run"; exit 1 ;;
+          esac
+```
+
 ## Exit codes
 
 `0` when the run completed, non-zero for a real failure (bad config, missing
 libvmaf, a point that could not be encoded or measured). A broken point stops
 the run: a hole in the curve is not a smaller answer, it is a wrong one.
 
-Gating a pipeline on a *regression* — the ladder getting worse against a
-committed baseline — is [LB-13](https://github.com/Allan-Nava/ladder-bench/blob/main/BACKLOG.md) and not implemented yet.
+`compare --exit-on-regression` exits `2` when the ladder got worse against the
+baseline, and `1` when it could not tell.

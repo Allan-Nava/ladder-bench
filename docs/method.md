@@ -212,6 +212,32 @@ never re-check. Every report carries:
   it measures, and two machines with different paths have to agree on the hash for
   it to be worth anything.
 
+## 6. Comparing two runs
+
+One report says what the ladder is. The question that follows is always whether
+that changed — a new ffmpeg, a new preset, a different week of content — and
+[`compare`](cli.md#compare) answers it with the same BD-rate arithmetic pointed at
+time instead of at a competitor: **how much bitrate this run needs for the quality
+the baseline delivered**.
+
+Everything that makes the cross-encoder BD-rate honest applies here too: the
+average covers only the quality range both runs reached, curves that barely
+overlap are declined, and nothing is interpolated between the two.
+
+Two extra refusals belong to this comparison specifically:
+
+- **Two runs of different experiments are not compared, they are reported as
+  different.** The config fingerprint decides. A wider grid, another target or one
+  more clip move every number without anything having got better or worse.
+- **A ladder whose shape changed is not paired rung by rung.** Two ladders with
+  different resolutions are shown side by side, because pairing them by index
+  would invent a comparison.
+
+The totals, meanwhile, stay as untrustworthy as they were: a real comparison in
+these docs shows a ladder total falling while every rung got worse. Rate control
+still hit its targets; what changed is what those bits bought. That is why the
+headline is a BD-rate and not a sum.
+
 ## What this does not measure
 
 - **Your audience.** The savings are per-rung and per-quality, not weighted by
