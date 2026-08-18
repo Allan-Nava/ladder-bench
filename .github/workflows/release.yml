@@ -17,6 +17,40 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25"
+
+      # The tap push is the only cross-repo step of a release, so it is the only
+      # one with a credential that can rot on its own: a PAT can be missing,
+      # revoked or expired while the rest of the release is perfectly healthy.
+      # GoReleaser touches it **last**, after the GitHub release and every asset
+      # are already public, which is how v0.8.0 shipped: release published, cask
+      # never pushed, `Brew test` skipped by its own success guard, and the only
+      # clue a `401 Bad credentials` — which is what an *unset* secret looks like
+      # to the API, because Actions turns a missing secret into an empty string.
+      #
+      # Checking the token before anything is built turns that half-release into a
+      # twenty-second failure with nothing published and a message that names the
+      # fix. `push` is asserted, not just readability: a token that can read the
+      # tap and not write it fails at the last step exactly like an empty one.
+      - name: The tap token can write to the tap
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          TAP: Allan-Nava/homebrew-tap
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error::secret HOMEBREW_TAP_GITHUB_TOKEN is not set on this repository — GoReleaser needs it to push Casks/ladder-bench.rb to $TAP. Create a PAT with Contents: read and write on that repo and add it with: gh secret set HOMEBREW_TAP_GITHUB_TOKEN -R ${{ github.repository }}"
+            exit 1
+          fi
+          if ! repo="$(gh api "repos/$TAP" 2>&1)"; then
+            echo "::error::HOMEBREW_TAP_GITHUB_TOKEN cannot read $TAP (expired, revoked, or not granted that repository): $repo"
+            exit 1
+          fi
+          if [ "$(printf '%s' "$repo" | jq -r '.permissions.push')" != "true" ]; then
+            echo "::error::HOMEBREW_TAP_GITHUB_TOKEN can read $TAP but not write it — it needs Contents: read and write"
+            exit 1
+          fi
+          echo "$TAP is writable, default branch $(printf '%s' "$repo" | jq -r .default_branch)"
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser

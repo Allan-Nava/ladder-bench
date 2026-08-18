@@ -2,6 +2,16 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/it/1.1.0/), versioni [SemVer](https://semver.org/lang/it/).
 
+## 0.8.1
+
+### Corretto
+
+- **Una release non pubblica più a metà.** Il push del cask nel tap è l'unico passo cross-repo di una release, quindi l'unico con una credenziale che può guastarsi da sola — e GoReleaser la usa **per ultima**, quando la release GitHub e tutti gli asset sono già pubblici. Con il secret `HOMEBREW_TAP_GITHUB_TOKEN` non ancora impostato, la v0.8.0 è uscita così: release pubblicata, cask mai spinto, `Brew test` saltato dalla sua stessa guardia sul successo, e come unico indizio un `401 Bad credentials` — che è l'aspetto che ha un secret **assente**, perché Actions trasforma un secret mancante in una stringa vuota invece di lamentarsi.
+
+  Ora il job verifica il token prima di costruire qualsiasi cosa: assente, non in grado di leggere il tap, o senza permesso di scrittura (`permissions.push`, perché un token che legge e non scrive fallisce all'ultimo passo esattamente come uno vuoto) → fallisce in venti secondi, senza niente pubblicato e con un messaggio che dice quale secret creare e con che permessi. Una release ora è tutta o niente, invece di una release riuscita con un pezzo silenziosamente mancante.
+
+  Conseguenza pratica: la **v0.8.0 è senza cask**, quindi il primo `brew install --cask Allan-Nava/tap/ladder-bench` che funziona è questo.
+
 ## 0.8.0
 
 ### Aggiunto
