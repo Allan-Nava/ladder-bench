@@ -54,11 +54,13 @@ ffmpeg -f lavfi -i "testsrc2=size=1920x1080:rate=25" -t 8 -c:v libx264 -crf 18 -
 - **La coda in discesa dell'hull va tagliata**: un punto che costa di più e misura meno (overshoot del rate control) resterebbe nel risultato e si leggerebbe come "paga di più, vedi meno".
 - **`concurrency: 1` è il default voluto**: ffmpeg satura già la macchina e encode paralleli rendono i tempi per punto privi di senso.
 - **Un punto rotto ferma il run** (fail-fast con `cancel()`): un buco nella curva non è una risposta più piccola, è una risposta sbagliata.
+- **Nessun pacchetto di distribuzione ha libvmaf**: verificato su Debian 12 (ffmpeg 5.1), Debian 13 (7.1), Ubuntu 24.04 (6.1) e Alpine 3.21 (6.1) — tutti installano un ffmpeg sano che non misura niente. Per questo l'immagine Docker prende i binari da `mwader/static-ffmpeg` **pinnato per digest della manifest list** (digest, non tag, perché un ffmpeg nuovo può spostare i numeri; della *lista*, così resta multi-arch). Cambiarlo è una decisione, non un aggiornamento.
 - **La CI non ha libvmaf** e non deve averlo: i test coprono argomenti, parsing e orchestrazione con fake. Ciò che va verificato con ffmpeg vero si verifica a mano.
 
 ## Puntatori
 
 - Backlog: `BACKLOG.md` (`LB-n`) · Config d'esempio: `cmd/ladder-bench/example.yml` (embedded, **unica copia** — `ladder-bench init` la scrive)
+- Docker: `Dockerfile` (multi-stage, utente non root, `/work` come workdir) + `.github/workflows/docker.yml` (build su ogni push, publish multi-arch su GHCR sui tag). Il job Docker è **l'unico posto in CI che può misurare davvero**, perché l'immagine si porta libvmaf: fa un run vero su clip sintetico e asserisce sui numeri.
 - CI: `.github/workflows/ci.yml` (fmt/vet/test/lint + govulncheck) · Release: `.github/workflows/release.yml` + `.goreleaser.yaml` sui tag `v*`
 - Documentazione: `docs/` — `index.md` (overview), `configuration.md`, `method.md`, `output.md` (il report + schema JSON), `cli.md`, `ci.md`. Sito: `.github/workflows/pages.yml` renderizza `docs/` con Jekyll a ogni push su `main` che tocca `docs/`. Niente tema e niente Gemfile: `docs/_config.yml`, `docs/_layouts/default.html` e `docs/assets/style.css` sono tutta la macchina, scritti a mano. Per provare il build in locale serve il gem `github-pages` (Jekyll 3.10, lo stesso della CI) e un locale UTF-8: `LANG=en_US.UTF-8 bundle exec jekyll build -s docs -d /tmp/site`
 - Repo affini: `~/projects/github.com/checkfleet`, `nats-lens`, `nomad-lens`, `ansible-vars-lens`

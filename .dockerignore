@@ -1,0 +1,8 @@
+# Nothing but the Go module reaches the build context. A whitelist rather than a
+# list of exclusions: a new directory that the binary does not need should not
+# start being copied into the image because nobody remembered to exclude it.
+*
+!go.mod
+!go.sum
+!cmd/
+!internal/

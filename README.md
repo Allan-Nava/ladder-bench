@@ -47,6 +47,19 @@ go install github.com/Allan-Nava/ladder-bench/cmd/ladder-bench@latest
 Requires an **ffmpeg built with libvmaf** (`--enable-libvmaf`; Homebrew's
 ffmpeg has it). `ladder-bench doctor` tells you if yours does.
 
+Or skip that part entirely — the container image ships ffmpeg, ffprobe and the
+CLI together:
+
+```bash
+docker run --rm -v "$PWD:/work" ghcr.io/allan-nava/ladder-bench doctor
+```
+
+libvmaf is a compile-time option and **no distro package enables it** (checked:
+Debian 12 and 13, Ubuntu 24.04, Alpine 3.21 — all ship an ffmpeg that cannot
+measure anything). That is why the image exists. See
+[Docker](https://allan-nava.github.io/ladder-bench/docker/) for the flags that
+matter.
+
 ## Use
 
 ```bash
@@ -169,6 +182,8 @@ in [`docs/`](docs/), published as a site.
   it prints, and the full JSON schema
 - [CLI reference](https://allan-nava.github.io/ladder-bench/cli/) — every
   command, flag and exit code
+- [Docker](https://allan-nava.github.io/ladder-bench/docker/) — the image with
+  ffmpeg and libvmaf already in it
 - [In CI](https://allan-nava.github.io/ladder-bench/ci/) — scheduled runs,
   caching, job summaries
 - [`BACKLOG.md`](BACKLOG.md) — what is planned, with stable ids

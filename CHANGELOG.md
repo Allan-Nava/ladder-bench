@@ -2,6 +2,30 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/it/1.1.0/), versioni [SemVer](https://semver.org/lang/it/).
 
+## 0.4.0
+
+### Aggiunto
+
+- **Immagine Docker (LB-22)** — `ghcr.io/allan-nava/ladder-bench`, multi-arch (`linux/amd64`, `linux/arm64`), ~220 MB:
+
+  ```bash
+  docker run --rm -v "$PWD:/work" ghcr.io/allan-nava/ladder-bench doctor
+  ```
+
+  Esiste per togliere di mezzo il pezzo difficile del setup. libvmaf è un'opzione di compilazione e **nessun pacchetto di distribuzione la abilita**: verificato su Debian 12 (ffmpeg 5.1), Debian 13 (7.1), Ubuntu 24.04 (6.1) e Alpine 3.21 (6.1) — tutti installano un ffmpeg perfettamente sano che non misura niente. Quindi i binari vengono da un build statico che ce l'ha (`mwader/static-ffmpeg`, con libvmaf, x264, x265, SVT-AV1 e VP9), **pinnato per digest della manifest list**: digest e non tag perché un ffmpeg nuovo può spostare i numeri, e quello è un cambiamento che va in un messaggio di commit invece che in quello che il registry serviva quella mattina; della *lista* perché è ciò che tiene l'immagine multi-arch.
+
+  Le scelte che si notano usandola:
+  - **`/work` è la workdir e l'utente non è root** (uid 1000, quello che un host Linux monouso assegna per primo). Un run scrive reference, encode e log VMAF dentro `work_dir`, che attraverso il bind mount è una directory di qualcuno: girare da root li lascerebbe di proprietà di root in mezzo al suo progetto. Con `-v "$PWD:/work"` una config chiamata `ladder-bench.yml` si trova senza nemmeno un `--config`;
+  - **i sottocomandi sono gli argomenti** (`ENTRYPOINT ["ladder-bench"]`), così `docker run <image> doctor` si legge come la CLI che è; senza argomenti stampa l'usage ed esce 0, invece di uscire 64 su un container a cui nessuno ha chiesto niente;
+  - **Alpine e non `scratch`**: una shell è ciò che trasforma "il container ha fatto una cosa strana" in una sessione in cui si può guardare in giro.
+
+- **`.github/workflows/docker.yml`** costruisce l'immagine a ogni push e la pubblica su GHCR sui tag `v*` (`0.4.0`, `0.4`, `latest`). Sui non-tag la carica in locale e ci fa girare **una misura vera** su clip sintetico, con assert su VMAF, bitrate, PSNR e SSIM: è **l'unico job del repo che può misurare davvero**, perché l'immagine si porta libvmaf mentre il runner no. Nessun filtro `paths:` di proposito — un tag punta di solito a un commit già su main, quindi il suo push non porta una lista di file su cui filtrare, e la pubblicazione salterebbe esattamente quando serve.
+
+### Modificato
+
+- **`docs/ci.md`** usa l'immagine invece di chiedere un ffmpeg con libvmaf sul runner, e la invoca con `docker run` per comando e **non** come `container:` del job: un job container deve eseguire il Node.js di GitHub per ogni action JavaScript, `actions/checkout` compresa, ed è un build glibc che su una base musl non parte.
+- **Documentazione**: pagina nuova [`docs/docker.md`](https://allan-nava.github.io/ladder-bench/docker/) — perché l'immagine esiste, i tre flag che contano (`-v`, `--user`, `--rm`), cosa c'è dentro, come rifarsela, e cosa cambia il container nella misura: la qualità per bit non cambia (è lo stesso codice), i **tempi** sì, sia per un limite di CPU sia sotto emulazione, e i tempi sono l'unico segnale di costo che il report porta.
+
 ## 0.3.0
 
 ### Aggiunto

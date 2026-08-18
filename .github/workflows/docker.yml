@@ -1,0 +1,123 @@
+# Builds the container image on every push and pull request, and publishes it to
+# GHCR on a version tag.
+#
+# There is no `paths:` filter on purpose. A tag usually points at a commit that
+# is already on main, so its push event carries no file list for a filter to
+# match — the publish would be skipped exactly when it matters. A minute of
+# build on every push is the cheaper mistake.
+name: Docker
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # GHCR rejects an uppercase path, and the owner here is Allan-Nava. Spelled
+  # out rather than derived from github.repository for that reason.
+  IMAGE: ghcr.io/allan-nava/ladder-bench
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            # Branch and PR tags are never pushed; they exist so a non-release
+            # build has a name to be loaded under and smoke-tested. Without one,
+            # `load: true` would produce an image nothing can refer to.
+            type=ref,event=branch
+            type=ref,event=pr
+
+      # A tag publishes both architectures; anything else builds one and loads
+      # it locally so the smoke test below has something to run.
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ startsWith(github.ref, 'refs/tags/v') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          load: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version || 'docker' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The image carries its own ffmpeg with libvmaf, so this is the one job in
+      # the repository that can measure something for real. The Go tests cannot:
+      # the runner has no libvmaf, which is why they use fakes.
+      - name: Measure a synthetic clip
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          set -euo pipefail
+          IMG="$(echo '${{ steps.meta.outputs.tags }}' | head -1)"
+          mkdir -p smoke && cd smoke
+          run() { docker run --rm -v "$PWD:/work" --user "$(id -u):$(id -g)" "$IMG" "$@"; }
+
+          docker run --rm -v "$PWD:/work" --user "$(id -u):$(id -g)" \
+            --entrypoint ffmpeg "$IMG" -hide_banner -loglevel error -y \
+            -f lavfi -i "testsrc2=size=640x360:rate=25" -t 2 \
+            -c:v libx264 -crf 18 -pix_fmt yuv420p source.mp4
+
+          cat > ladder-bench.yml <<'YML'
+          input: source.mp4
+          clip:
+            start: "0s"
+            duration: "2s"
+          encoders:
+            - name: x264-fast
+              codec: libx264
+              preset: ultrafast
+          rungs:
+            - height: 360
+              bitrates: [300, 900]
+          vmaf:
+            n_subsample: 5
+            metrics: [psnr, ssim]
+          YML
+
+          run version
+          run doctor
+          run plan > /dev/null
+          run run --output json --out ladder.json --quiet
+
+          # A run that measured nothing still writes a report, so assert on the
+          # numbers rather than on the exit code alone.
+          python3 - <<'PY'
+          import json, sys
+          d = json.load(open("ladder.json"))
+          pts = [p for a in d["analysis"] for c in a["curves"] for p in c["points"]]
+          assert len(pts) == 2, pts
+          for p in pts:
+              assert p["vmaf"] > 0, p
+              assert p["kbps"] > 0, p
+              assert p["psnr_y"] > 0, p
+              assert 0 < p["ssim"] <= 1, p
+          print("measured", len(pts), "points:", [round(p["vmaf"], 2) for p in pts])
+          PY

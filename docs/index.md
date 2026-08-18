@@ -41,7 +41,14 @@ go install github.com/Allan-Nava/ladder-bench/cmd/ladder-bench@latest
 ```
 
 Pre-built binaries are attached to each
-[release](https://github.com/Allan-Nava/ladder-bench/releases).
+[release](https://github.com/Allan-Nava/ladder-bench/releases), and there is a
+container image with ffmpeg and libvmaf already inside it:
+
+```bash
+docker run --rm -v "$PWD:/work" ghcr.io/allan-nava/ladder-bench doctor
+```
+
+See [Docker](docker.md) for the flags that matter.
 
 ladder-bench needs an **ffmpeg built with libvmaf** (`--enable-libvmaf`;
 Homebrew's ffmpeg has it). libvmaf is a build-time option, so a perfectly
@@ -106,4 +113,5 @@ method page, and worth reading before quoting a percentage at anyone.
   acting on a report.
 - **[The report](output.md)** — how to read each block, and the JSON schema.
 - **[CLI reference](cli.md)** — every command, flag and exit code.
+- **[Docker](docker.md)** — an image with ffmpeg and libvmaf already in it.
 - **[In CI](ci.md)** — scheduled runs, caching, job summaries.

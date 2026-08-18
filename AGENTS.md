@@ -33,8 +33,9 @@ Questo file definisce le regole operative per gli agent (Copilot, Claude, altri 
 - Escapare sempre i valori dentro il filtergraph (`escapeFilter`): un `:` nel `log_path` rompe l'opzione.
 - Bitrate riportato = quello reale (byte/durata); `analysis.SnapTolerance` (5%) copre lo scarto dal target.
 - Il risparmio si calcola **rung per rung a parità di qualità**, sommando solo i rung confrontabili; i totali di ladder con rung diversi non sono confrontabili.
+- **Nessun pacchetto di distribuzione ha libvmaf** (Debian 12/13, Ubuntu 24.04, Alpine 3.21 verificati): l'immagine Docker prende ffmpeg da `mwader/static-ffmpeg` pinnato per digest della manifest list.
 - `Knee` scansiona dall'alto; la coda in discesa dell'hull va tagliata; `concurrency: 1` è il default voluto; un punto rotto ferma il run.
 
 ## Puntatori
 
-`BACKLOG.md` · `CLAUDE.md` (versione estesa di queste regole) · `docs/` (`index`, `configuration`, `method`, `output`, `cli`, `ci` — pubblicate da `.github/workflows/pages.yml`, senza tema né Gemfile) · config d'esempio embedded in `cmd/ladder-bench/example.yml`.
+`BACKLOG.md` · `CLAUDE.md` (versione estesa di queste regole) · `Dockerfile` + `.github/workflows/docker.yml` · `docs/` (`index`, `configuration`, `method`, `output`, `cli`, `docker`, `ci` — pubblicate da `.github/workflows/pages.yml`, senza tema né Gemfile) · config d'esempio embedded in `cmd/ladder-bench/example.yml`.

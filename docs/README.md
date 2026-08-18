@@ -14,6 +14,8 @@ renders them, it does not duplicate them.
 - **[output.md](output.md)** — the report block by block, every phrase it can
   print, and the full JSON schema.
 - **[cli.md](cli.md)** — every command, flag and exit code.
+- **[docker.md](docker.md)** — the container image that already has an ffmpeg
+  with libvmaf, and the flags that make a bind-mounted run behave.
 - **[ci.md](ci.md)** — scheduled runs, what a runner needs (an ffmpeg with
   libvmaf), caching a work dir, job summaries.
 
