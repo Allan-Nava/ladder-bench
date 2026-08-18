@@ -1,6 +1,7 @@
 package ffmpeg
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -130,5 +131,70 @@ func TestKnownMetrics(t *testing.T) {
 	}
 	if !KnownMetric("psnr") || KnownMetric("PSNR") || KnownMetric("") {
 		t.Error("KnownMetric should match the exact configured spelling only")
+	}
+}
+
+// The percentiles come off the per-frame section libvmaf already writes, so no
+// point is ever re-measured to obtain them.
+func TestParseVMAFLogReadsPercentiles(t *testing.T) {
+	// 20 frames: nineteen good ones and one that fell apart.
+	frames := make([]string, 0, 20)
+	for i := 0; i < 19; i++ {
+		frames = append(frames, fmt.Sprintf(`{"frameNum":%d,"metrics":{"vmaf":%d}}`, i, 90+i%3))
+	}
+	frames = append(frames, `{"frameNum":19,"metrics":{"vmaf":41.5}}`)
+	log := []byte(`{"version":"3.0.0","frames":[` + strings.Join(frames, ",") +
+		`],"pooled_metrics":{"vmaf":{"min":41.5,"max":92,"mean":88.5,"harmonic_mean":86.1}}}`)
+
+	score, err := ParseVMAFLog(log)
+	if err != nil {
+		t.Fatalf("ParseVMAFLog: %v", err)
+	}
+	// Nearest rank over 20 frames: P1 and P5 both land on the first, which is
+	// the broken one. A mean of 88.5 says nothing about it.
+	if score.P1 == nil || *score.P1 != 41.5 {
+		t.Errorf("P1 = %v, want the worst frame 41.5", score.P1)
+	}
+	if score.P5 == nil || *score.P5 != 41.5 {
+		t.Errorf("P5 = %v, want 41.5", score.P5)
+	}
+	if score.LibVMAF != "3.0.0" {
+		t.Errorf("libvmaf version = %q, want 3.0.0", score.LibVMAF)
+	}
+}
+
+// A log with no per-frame scores must report no percentiles rather than zeros —
+// and must not fail, because the pooled numbers in it are still good.
+func TestParseVMAFLogWithoutPerFrameScores(t *testing.T) {
+	log := []byte(`{"frames":[{"frameNum":0},{"frameNum":1}],
+		"pooled_metrics":{"vmaf":{"min":70,"max":95,"mean":91.5,"harmonic_mean":90.2}}}`)
+	score, err := ParseVMAFLog(log)
+	if err != nil {
+		t.Fatalf("ParseVMAFLog: %v", err)
+	}
+	if score.P1 != nil || score.P5 != nil {
+		t.Errorf("percentiles must be absent, not zero: %+v", score)
+	}
+	if score.Mean != 91.5 || score.Frames != 2 {
+		t.Errorf("the pooled numbers should survive: %+v", score)
+	}
+}
+
+// Nearest rank, never interpolated: a percentile has to be a score some frame
+// actually received.
+func TestPercentileUsesNearestRank(t *testing.T) {
+	s := []float64{10, 20, 30, 40, 50, 60, 70, 80, 90, 100}
+	for _, tc := range []struct{ p, want float64 }{
+		{1, 10}, {5, 10}, {10, 10}, {50, 50}, {95, 100}, {100, 100},
+	} {
+		if got := percentile(s, tc.p); got != tc.want {
+			t.Errorf("percentile(p%v) = %v, want %v", tc.p, got, tc.want)
+		}
+	}
+	if got := percentile(nil, 1); got != 0 {
+		t.Errorf("percentile of nothing = %v", got)
+	}
+	if got := percentile([]float64{42}, 1); got != 42 {
+		t.Errorf("percentile of one frame = %v, want 42", got)
 	}
 }

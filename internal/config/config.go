@@ -7,6 +7,8 @@ package config
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -286,6 +288,32 @@ func (c *Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+// Hash fingerprints the **resolved** config: after defaults, before the run.
+//
+// Hashing the file bytes instead would make a comment change look like a
+// different experiment, and would make two files that differ only in what they
+// leave to the defaults look like two experiments when they are one. What a
+// report needs to answer is "was this measured under the same settings", and the
+// settings are what is in this struct once Load has finished with it.
+func (c *Config) Hash() (string, error) {
+	// The work dir, the binary paths and the concurrency are deliberately not
+	// part of it: they change where and how fast a run happens, never what it
+	// measures. Two machines with different paths must produce the same hash or
+	// the number is useless for comparing runs.
+	comparable := *c
+	comparable.WorkDir = ""
+	comparable.FFmpeg = ""
+	comparable.FFprobe = ""
+	comparable.Concurrency = 0
+	comparable.KeepEncodes = false
+	data, err := yaml.Marshal(&comparable)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // Points is the number of encodes the config asks for.

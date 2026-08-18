@@ -3,6 +3,7 @@ package output
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/Allan-Nava/ladder-bench/internal/analysis"
 )
@@ -19,13 +20,31 @@ func Markdown(out io.Writer, r Report) error {
 		geometry(r.Reference.Media.Width, r.Reference.Media.Height), r.Reference.Media.Duration)
 	fmt.Fprintf(w, "- **Measured**: %d points · target VMAF %.1f · ladder step %.1f\n", len(r.Results), r.Options.TargetVMAF, r.Options.LadderStep)
 	fmt.Fprintf(w, "- **Tool**: %s %s, %s\n", r.Tool, r.Version, r.Generated)
+	if r.Env.FFmpeg != "" {
+		fmt.Fprintf(w, "- **ffmpeg**: `%s`\n", r.Env.FFmpeg)
+	}
+	if len(r.Env.LibVMAF) > 0 {
+		fmt.Fprintf(w, "- **libvmaf**: %s\n", strings.Join(r.Env.LibVMAF, ", "))
+	}
+	if r.Env.ConfigSHA256 != "" {
+		fmt.Fprintf(w, "- **Config fingerprint**: `%s`\n", r.Env.ConfigShort())
+	}
+	if r.Env.MixedLibVMAF() {
+		fmt.Fprintf(w, "\n> These points were not all measured by the same libvmaf. Re-run with `--force` before comparing them.\n")
+	}
 
 	for _, a := range r.Analyses {
 		fmt.Fprintf(w, "\n## Encoder `%s`\n", a.Encoder)
 		psnr, ssim := measured(a, pointPSNR), measured(a, pointSSIM)
+		tails := measured(a, pointP1) || measured(a, pointP5)
 		fmt.Fprintf(w, "\n### Measurements\n\n")
-		head := "| Resolution | Target | Actual | VMAF | VMAF harmonic | VMAF min | Gain per +10% |"
-		rule := "|---|---:|---:|---:|---:|---:|---:|"
+		head := "| Resolution | Target | Actual | VMAF | VMAF harmonic |"
+		rule := "|---|---:|---:|---:|---:|"
+		if tails {
+			head, rule = head+" P5 | P1 |", rule+"---:|---:|"
+		}
+		head += " VMAF min | Gain per +10% |"
+		rule += "---:|---:|"
 		if psnr {
 			head, rule = head+" PSNR-Y |", rule+"---:|"
 		}
@@ -41,8 +60,12 @@ func Markdown(out io.Writer, r Report) error {
 				if v, ok := g[p.Target]; ok {
 					gain = fmt.Sprintf("%.2f", v)
 				}
-				row := fmt.Sprintf("| %s | %dk | %s | %.2f | %s | %.2f | %s |",
-					res(p.Height), p.Target, kbps(p.Kbps), p.VMAF, harmonic(p.VMAFHarmonic), p.VMAFMin, gain)
+				row := fmt.Sprintf("| %s | %dk | %s | %.2f | %s |",
+					res(p.Height), p.Target, kbps(p.Kbps), p.VMAF, harmonic(p.VMAFHarmonic))
+				if tails {
+					row += " " + optional(p.P5, "%.2f") + " | " + optional(p.P1, "%.2f") + " |"
+				}
+				row += fmt.Sprintf(" %.2f | %s |", p.VMAFMin, gain)
 				if psnr {
 					row += " " + optional(p.PSNR, "%.2f") + " |"
 				}

@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -99,6 +100,25 @@ type Executor interface {
 	Run(ctx context.Context, bin string, args []string) error
 }
 
+// Version is the first line of `ffmpeg -version`, which carries the version and
+// the build it came from.
+//
+// The whole line rather than a parsed version number: distributions and static
+// builds spell it differently ("7.1", "6.1.1-3ubuntu5", "N-119145-g4d0d6e1"), and
+// a report is better off quoting what the binary said than storing this tool's
+// interpretation of it.
+func (t Tools) Version(ctx context.Context) (string, error) {
+	out, err := capture(ctx, t.FFmpeg, "-hide_banner", "-version")
+	if err != nil {
+		return "", err
+	}
+	lines := nonEmptyLines(string(out))
+	if len(lines) == 0 {
+		return "", fmt.Errorf("%s -version printed nothing", t.FFmpeg)
+	}
+	return lines[0], nil
+}
+
 // ExecRunner runs commands for real.
 type ExecRunner struct {
 	// Verbose echoes each command to stderr before running it.
@@ -114,7 +134,7 @@ func (r ExecRunner) Run(ctx context.Context, bin string, args []string) error {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s: %w\n%s", filepath.Base(bin), err, tail(stderr.String(), 8))
+		return fmt.Errorf("%s: %w\n%s", filepath.Base(bin), err, errorContext(stderr.String()))
 	}
 	return nil
 }
@@ -125,24 +145,60 @@ func capture(ctx context.Context, bin string, args ...string) ([]byte, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("%s %s: %w\n%s", filepath.Base(bin), strings.Join(args, " "), err, tail(stderr.String(), 8))
+		return nil, fmt.Errorf("%s %s: %w\n%s", filepath.Base(bin), strings.Join(args, " "), err, errorContext(stderr.String()))
 	}
 	return stdout.Bytes(), nil
 }
 
-// tail keeps the last n non-empty lines: ffmpeg reports the actual reason on
-// the last line and pads everything above it with progress noise.
-func tail(s string, n int) string {
+// stderrTailLines is how many trailing lines of ffmpeg's output a failure
+// carries. ffmpeg answers a broken encode with a cascade of its own messages —
+// one per thread that noticed — so the tail has to be deep enough to clear the
+// cascade and still land on something.
+const stderrTailLines = 12
+
+// libraryError matches a line where an encoder library reports on itself rather
+// than ffmpeg reporting on the library. These are where the actual cause lives:
+//
+//	Svt[error]: Instance 1: Max Bitrate only supported with CRF mode
+//	x265 [error]: ...
+//	[libsvtav1 @ 0x12062e730] Error setting encoder parameters
+//
+// ffmpeg then prints eight or more lines of consequence underneath, which is
+// exactly how the one useful line falls out of a fixed-size tail.
+var libraryError = regexp.MustCompile(`(?i)^\s*(\[[a-z0-9_.-]+ @ 0x[0-9a-f]+\].*error|[a-z0-9]+ ?\[error\]|[a-z0-9]+ ?\[fatal\])`)
+
+// errorContext is what a failed command reports: the tail of its stderr, plus
+// any earlier line where a library said what went wrong.
+//
+// Lifting those lines out of order is deliberate. A `…` marks the gap, because a
+// reader who sees two blocks knows one was pulled forward, and a reader who sees
+// only a truncated cascade knows nothing at all.
+func errorContext(s string) string {
+	lines := nonEmptyLines(s)
+	if len(lines) <= stderrTailLines {
+		return strings.Join(lines, "\n")
+	}
+	cut := len(lines) - stderrTailLines
+	var lifted []string
+	for _, l := range lines[:cut] {
+		if libraryError.MatchString(l) {
+			lifted = append(lifted, l)
+		}
+	}
+	if len(lifted) == 0 {
+		return strings.Join(lines[cut:], "\n")
+	}
+	return strings.Join(append(append(lifted, "…"), lines[cut:]...), "\n")
+}
+
+func nonEmptyLines(s string) []string {
 	var lines []string
 	for _, l := range strings.Split(s, "\n") {
 		if strings.TrimSpace(l) != "" {
 			lines = append(lines, strings.TrimRight(l, "\r"))
 		}
 	}
-	if len(lines) > n {
-		lines = lines[len(lines)-n:]
-	}
-	return strings.Join(lines, "\n")
+	return lines
 }
 
 // Quote renders a command the way a shell would accept it, for `plan` output

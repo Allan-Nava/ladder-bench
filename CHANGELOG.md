@@ -2,6 +2,26 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/it/1.1.0/), versioni [SemVer](https://semver.org/lang/it/).
 
+## 0.5.0
+
+### Aggiunto
+
+- **Percentili per-frame (LB-9).** Colonne `P5` e `P1`: il 5° e il 1° percentile dei punteggi per frame, cioè i momenti peggiori del clip — quelli che una media è fatta per assorbire. Escono dalla sezione per-frame che ogni log libvmaf reale scrive già, quindi **nessun punto viene rimisurato** per averli.
+
+  Si leggono a **rango più vicino** (il valore in posizione ceil(p/100 · N) sui frame ordinati), non interpolati: un percentile interpolato è un punteggio che nessun frame ha ricevuto, ed è esattamente il tipo di numero che questo tool si rifiuta di stampare in ogni altro punto. Due conseguenze da sapere: `n_subsample` li rende più grossolani, perché coprono i frame **misurati** e non tutti; e su un clip corto P1 e P5 cadono sullo stesso frame, che è onesto e non rotto — venti frame non distinguono un primo percentile da un quinto.
+
+  Perché serviva, con numeri veri: su un clip con **un secondo rotto** in mezzo, il rung da 800k misura VMAF **70.15** e P1 **16.35**. La media da sola lo avrebbe dichiarato accettabile.
+
+- **Riproducibilità (LB-11).** Ogni report dice cos'è che l'ha misurato: la **riga di versione di ffmpeg** verbatim come l'ha stampata il binario (distribuzioni e build statiche la scrivono in modi diversi, e citare quello che ha detto batte conservare la nostra interpretazione), **ogni versione di libvmaf che ha scritto uno dei log** — una lista, perché una griglia ripresa può mescolarne due e il report lo dichiara invece di mediarci sopra — e un **fingerprint SHA-256 della config risolta**.
+
+  Il fingerprint è sulla config **dopo i default**, così un file che scrive esplicitamente ciò che un altro lascia implicito produce lo stesso hash. Work dir, path dei binari, `concurrency` e `keep_encodes` sono esclusi di proposito: cambiano *dove* e *quanto velocemente* gira un run, non *cosa* misura, e due macchine con path diversi devono concordare sull'hash perché serva a qualcosa.
+
+### Corretto
+
+- **La causa vera di un punto rotto non cade più fuori dalla finestra (LB-21).** ffmpeg risponde a un encode fallito con una cascata di conseguenze — una per thread che se ne accorge — e la riga che spiega *perché* sta sopra la cascata. Con una coda fissa di 8 righe era la prima cosa a essere buttata via.
+
+  Ora la coda è di 12 righe **e** le righe in cui una libreria di encoding parla di sé stessa (`Svt[error]:`, `x265 [error]:`, `[libsvtav1 @ 0x…] Error …`) vengono **portate sopra** la coda, con un `…` che segna il salto: chi vede due blocchi sa che uno è stato spostato, chi vede solo una cascata troncata non sa niente. Verificato dal vivo con SVT-AV1, dove `Svt[error]: Instance 1: Max Bitrate only supported with CRF mode` ora arriva a schermo — è il messaggio che serve per capire `LB-20`.
+
 ## 0.4.0
 
 ### Aggiunto

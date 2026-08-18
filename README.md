@@ -80,13 +80,13 @@ where it stopped (`--force` re-encodes everything).
 
 ```
 encoder x264-fast (libx264, preset veryfast)
-  RES    TARGET  ACTUAL  VMAF   HMEAN  MIN    GAIN/+10%
-  1080p  1500k   1489k   86.74  85.90  79.90  —
-  1080p  3000k   3037k   93.14  92.71  90.25  0.62
-  1080p  6000k   6136k   96.87  96.62  95.47  0.37
-  720p   800k    736k    79.63  78.02  71.30  —
-  720p   1500k   1461k   84.79  83.74  77.10  0.53
-  720p   3000k   2974k   88.38  87.55  83.72  0.35
+  RES    TARGET  ACTUAL  VMAF   HMEAN  P5     P1     MIN    GAIN/+10%
+  1080p  1500k   1489k   86.74  85.90  81.02  79.94  79.90  —
+  1080p  3000k   3037k   93.14  92.71  90.88  90.30  90.25  0.62
+  1080p  6000k   6136k   96.87  96.62  95.71  95.50  95.47  0.37
+  720p   800k    736k    79.63  78.02  72.44  71.35  71.30  —
+  720p   1500k   1461k   84.79  83.74  78.20  77.14  77.10  0.53
+  720p   3000k   2974k   88.38  87.55  84.61  83.80  83.72  0.35
 
   saturation
     1080p  flattens at 3037k (VMAF 93.1) — the top 51% of this grid's bitrate buys nothing
@@ -153,12 +153,17 @@ that merely look precise.
 - **The ladder rungs are measured points**, never interpolated bitrates, and
   they are spaced by ~6 VMAF (roughly one just-noticeable difference) instead
   of by the usual bitrate halving.
-- **More than one number per point.** Every report carries the VMAF **harmonic
-  mean** next to the mean — when it sits well below, a few seconds of the clip
-  fell apart and the average absorbed it. `vmaf.metrics: [psnr, ssim]` adds
-  PSNR-Y and SSIM in the same pass, for a fraction of its cost. They are
-  reported, never acted on: VMAF alone drives every recommendation, because
-  averaging two metrics into one score only hides which one you were trusting.
+- **More than one number per point.** Next to the mean, every report carries the
+  VMAF **harmonic mean** and the **P5/P1 percentiles** of the per-frame scores —
+  the columns a mean is designed to absorb. On a real clip with one broken second
+  in it, VMAF said 70 and P1 said 16. `vmaf.metrics: [psnr, ssim]` adds PSNR-Y
+  and SSIM in the same pass, for a fraction of its cost. All of it is reported,
+  never acted on: VMAF alone drives every recommendation, because averaging two
+  metrics into one score only hides which one you were trusting.
+- **The report says what measured it** — the ffmpeg version line, every libvmaf
+  that wrote one of the logs, and a fingerprint of the resolved config. Two
+  reports with the same fingerprint measured the same experiment; two with
+  different ones did not, whatever their tables look like.
 
 ## Cost
 

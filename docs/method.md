@@ -90,6 +90,18 @@ libvmaf pools more than a mean, and every log carries all of this:
   and the average absorbed it. A rung whose mean and harmonic mean agree is a
   rung that was consistently that good.
 - **VMAF minimum** — the single worst frame.
+- **P5 and P1** — the 5th and 1st percentile of the per-frame scores. The mean is
+  designed to absorb bad moments; these are the columns that refuse to. A rung
+  averaging 93 with a P1 of 70 is not a rung that looks like 93.
+
+Percentiles use **nearest rank**: the value at position ceil(p/100 · N) of the
+sorted frames, so a reported P1 is always a score some frame actually received.
+An interpolated percentile would be a number no frame was given, which is the
+kind of value this tool refuses to print everywhere else. Two consequences worth
+knowing: `n_subsample` coarsens them, because the percentile is taken over the
+frames that were *scored* rather than all of them; and on a short clip P1 and P5
+collapse onto the same frame, which is honest rather than broken — twenty frames
+cannot distinguish a 1st from a 5th percentile.
 
 Adding `vmaf.metrics: [psnr, ssim]` collects two more in the **same pass**, for a
 fraction of its cost: the frames are already decoded, scaled and aligned, so the
@@ -164,6 +176,25 @@ meet — a percentage taken over a sliver looks like a verdict and is really the
 noise of a couple of frames. The report gives a BD-rate per resolution and one
 between the two efficient frontiers; the frontier figure is the ladder-level
 answer, where each encoder is free to pick its best resolution at each bitrate.
+
+## 5. What the report records about itself
+
+A measurement you cannot place is a measurement you can only trust or distrust,
+never re-check. Every report carries:
+
+- **the ffmpeg version line**, verbatim as the binary printed it. Distributions
+  and static builds spell it differently, and quoting what it said beats storing
+  this tool's interpretation of it;
+- **every libvmaf version that wrote one of the logs**, as a list. A list because
+  a resumed grid can mix two: points measured before an ffmpeg upgrade and points
+  measured after it are not the same experiment, and the report says so out loud
+  rather than averaging over it;
+- **a SHA-256 fingerprint of the resolved config** — after defaults have been
+  applied, so a file that spells out what another leaves implicit fingerprints
+  the same. The work dir, the binary paths, `concurrency` and `keep_encodes` are
+  deliberately excluded: they change where and how fast a run happens, never what
+  it measures, and two machines with different paths have to agree on the hash for
+  it to be worth anything.
 
 ## What this does not measure
 

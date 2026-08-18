@@ -56,6 +56,8 @@ func (r Result) Point() analysis.Point {
 		// Carried for the report only: the analysis reasons about bitrate
 		// against VMAF, and these are the columns a reader checks it against.
 		VMAFHarmonic: r.Score.Harmonic,
+		P1:           r.Score.P1,
+		P5:           r.Score.P5,
 		PSNR:         r.Score.PSNR,
 		SSIM:         r.Score.SSIM,
 	}

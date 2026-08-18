@@ -25,6 +25,38 @@ type Report struct {
 	// BDRates compares every other encoder against the anchor. Empty when the
 	// run measured a single encoder: there is nothing to compare it to.
 	BDRates []analysis.Comparison `json:"bd_rates,omitempty"`
+	// Env records what measured this, so an old report can be replayed or
+	// knowingly discarded instead of being trusted by default.
+	Env Environment `json:"environment"`
+}
+
+// Environment is the part of a report that is about the measurement rather than
+// the result: which binaries produced it and which settings it ran under.
+type Environment struct {
+	// FFmpeg is the first line of `ffmpeg -version`, verbatim.
+	FFmpeg string `json:"ffmpeg,omitempty"`
+	// LibVMAF lists every libvmaf version that wrote one of these logs. It is a
+	// list because a resumed grid can mix two: points measured before an ffmpeg
+	// upgrade and points measured after it are not the same experiment, and that
+	// is exactly the kind of thing a report should not smooth over.
+	LibVMAF []string `json:"libvmaf,omitempty"`
+	// ConfigSHA256 fingerprints the resolved config — after defaults, and
+	// without the paths and the concurrency, which change where a run happens
+	// and not what it measures.
+	ConfigSHA256 string `json:"config_sha256,omitempty"`
+}
+
+// MixedLibVMAF reports whether the points in this report were measured by more
+// than one libvmaf.
+func (e Environment) MixedLibVMAF() bool { return len(e.LibVMAF) > 1 }
+
+// ConfigShort is the config fingerprint at the length a human compares: enough
+// to tell two runs apart at a glance, and never presented as the whole hash.
+func (e Environment) ConfigShort() string {
+	if len(e.ConfigSHA256) < 12 {
+		return e.ConfigSHA256
+	}
+	return e.ConfigSHA256[:12]
 }
 
 // errWriter remembers the first write error so the renderers can stay a
@@ -129,6 +161,10 @@ func measured(a analysis.Result, pick func(analysis.Point) *float64) bool {
 	}
 	return false
 }
+
+func pointP1(p analysis.Point) *float64 { return p.P1 }
+
+func pointP5(p analysis.Point) *float64 { return p.P5 }
 
 func pointPSNR(p analysis.Point) *float64 { return p.PSNR }
 

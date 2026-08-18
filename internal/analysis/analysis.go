@@ -22,6 +22,10 @@ type Point struct {
 	VMAFMin float64 `json:"vmaf_min"`
 	// VMAFHarmonic weighs the worst frames more heavily than the mean does.
 	VMAFHarmonic float64 `json:"vmaf_harmonic_mean,omitempty"`
+	// P1 and P5 are the percentiles of the per-frame scores: the worst moments
+	// of the clip, which every average is designed to absorb.
+	P1 *float64 `json:"vmaf_p1,omitempty"`
+	P5 *float64 `json:"vmaf_p5,omitempty"`
 	// PSNR (Y plane, dB) and SSIM are nil unless the run asked for them. A zero
 	// could not say "not measured", and absent is not the same as terrible.
 	PSNR *float64 `json:"psnr_y,omitempty"`

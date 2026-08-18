@@ -171,3 +171,95 @@ vmaf:
 		t.Error("a duplicated metric was accepted")
 	}
 }
+
+// The fingerprint answers "was this measured under the same settings", so it has
+// to ignore everything that changes where a run happens and nothing that changes
+// what it measures.
+func TestHashIgnoresWhereARunHappens(t *testing.T) {
+	base := `
+input: in.mp4
+rungs:
+  - height: 1080
+    bitrates: [3000, 6000]
+analysis:
+  target_vmaf: 93
+`
+	a, err := Parse([]byte(base))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	ha, err := a.Hash()
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
+	}
+	if len(ha) != 64 {
+		t.Errorf("hash = %q, want 64 hex characters", ha)
+	}
+
+	// Same experiment on another machine: different paths, different work dir,
+	// a faster box. The fingerprint has to match or it cannot compare two runs.
+	b, _ := Parse([]byte(base))
+	b.WorkDir = "/mnt/scratch/lb"
+	b.FFmpeg = "/opt/homebrew/bin/ffmpeg"
+	b.FFprobe = "/opt/homebrew/bin/ffprobe"
+	b.Concurrency = 8
+	b.KeepEncodes = true
+	hb, _ := b.Hash()
+	if hb != ha {
+		t.Error("the fingerprint changed although nothing about the measurement did")
+	}
+
+	// A different grid is a different experiment.
+	c, _ := Parse([]byte(base))
+	c.Rungs[0].Bitrates = []int{3000, 6000, 9000}
+	if hc, _ := c.Hash(); hc == ha {
+		t.Error("adding a grid point must change the fingerprint")
+	}
+	// So is a different threshold, even though the grid is identical.
+	d, _ := Parse([]byte(base))
+	d.Analysis.TargetVMAF = 95
+	if hd, _ := d.Hash(); hd == ha {
+		t.Error("changing target_vmaf must change the fingerprint")
+	}
+	// And so is asking for another metric.
+	e, _ := Parse([]byte(base))
+	e.VMAF.Metrics = []string{"psnr"}
+	if he, _ := e.Hash(); he == ha {
+		t.Error("asking for PSNR must change the fingerprint")
+	}
+}
+
+// Defaults are part of the experiment: a config that spells out what another one
+// leaves implicit describes the same run and must fingerprint the same.
+func TestHashIsOverTheResolvedConfig(t *testing.T) {
+	implicit, err := Parse([]byte("input: in.mp4\nrungs:\n  - height: 720\n    bitrates: [1500]\n"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	explicit, err := Parse([]byte(`
+input: in.mp4
+rungs:
+  - height: 720
+    bitrates: [1500]
+vmaf:
+  model: version=vmaf_v0.6.1
+  n_subsample: 1
+analysis:
+  knee_gain: 0.5
+  target_vmaf: 93.0
+  ladder_step: 6.0
+  gop_seconds: 2.0
+encoders:
+  - name: x264-slow
+    codec: libx264
+    preset: slow
+`))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	hi, _ := implicit.Hash()
+	he, _ := explicit.Hash()
+	if hi != he {
+		t.Error("spelling out the defaults describes the same experiment, so the fingerprint must match")
+	}
+}

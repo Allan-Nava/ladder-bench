@@ -159,6 +159,21 @@ A **broken** point stops the run too, and the error names the point and carries
 the tail of ffmpeg's own output. This is deliberate: a hole in the curve is not
 a smaller answer, it is a wrong one.
 
+The tail is deep enough to clear ffmpeg's cascade — one message per thread that
+noticed — and when the line that actually explains the failure came from the
+encoder library rather than from ffmpeg, it is **lifted above** the tail with a
+`…` marking the gap:
+
+```
+ladder-bench: svt-av1 720p @ 3000k: encode: ffmpeg: exit status 234
+Svt[error]: Instance 1: Max Bitrate only supported with CRF mode
+…
+[vost#0:0/libsvtav1 @ …] Could not open encoder before EOF
+[out#0/mp4 @ …] Nothing was written into output file
+```
+
+Without that, the cause is the first thing a fixed-size tail throws away.
+
 ## `version`
 
 ```bash

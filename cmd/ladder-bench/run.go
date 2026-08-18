@@ -101,6 +101,7 @@ func runRun(ctx context.Context, args []string) error {
 		Results:   results,
 		Analyses:  analyses,
 		BDRates:   bdRates(cfg, analyses),
+		Env:       environment(ctx, cfg, tools, results),
 	}
 
 	w := os.Stdout
@@ -126,6 +127,36 @@ func options(cfg *config.Config) analysis.Options {
 		opt.Current = append(opt.Current, analysis.Rendition{Height: r.Height, Kbps: r.Bitrate})
 	}
 	return opt
+}
+
+// environment records what measured this run: the ffmpeg that ran, every
+// libvmaf that wrote one of the logs, and a fingerprint of the resolved config.
+//
+// None of it can fail the run. A report whose numbers are good and whose
+// provenance could not be read is still worth having — it just says less — so
+// each piece is left empty rather than turned into an error after an hour of
+// encoding.
+func environment(ctx context.Context, cfg *config.Config, tools ffmpeg.Tools, results []bench.Result) output.Environment {
+	var env output.Environment
+	if v, err := tools.Version(ctx); err == nil {
+		env.FFmpeg = v
+	} else {
+		fmt.Fprintln(os.Stderr, "ladder-bench: reading the ffmpeg version:", err)
+	}
+	if h, err := cfg.Hash(); err == nil {
+		env.ConfigSHA256 = h
+	}
+	// Sorted and deduplicated: the interesting fact is how many distinct
+	// versions are in here, not which point happened to be measured first.
+	seen := map[string]bool{}
+	for _, r := range results {
+		if v := r.Score.LibVMAF; v != "" && !seen[v] {
+			seen[v] = true
+			env.LibVMAF = append(env.LibVMAF, v)
+		}
+	}
+	sort.Strings(env.LibVMAF)
+	return env
 }
 
 // bdRates compares every encoder against the first one listed in the config.

@@ -12,11 +12,13 @@ import (
 )
 
 func sampleReport() Report {
-	// Every libvmaf log pools a harmonic mean, so every fixture point has one.
+	// Every libvmaf log pools a harmonic mean and writes a per-frame section, so
+	// every fixture point has both.
+	p1, p5 := 61.0, 68.0
 	points := []analysis.Point{
-		{Encoder: "x264", Height: 1080, Target: 2000, Kbps: 2010, VMAF: 86, VMAFHarmonic: 84.6, VMAFMin: 74},
-		{Encoder: "x264", Height: 1080, Target: 3000, Kbps: 3010, VMAF: 92, VMAFHarmonic: 90.8, VMAFMin: 82},
-		{Encoder: "x264", Height: 1080, Target: 4000, Kbps: 4020, VMAF: 93.5, VMAFHarmonic: 92.4, VMAFMin: 84},
+		{Encoder: "x264", Height: 1080, Target: 2000, Kbps: 2010, VMAF: 86, VMAFHarmonic: 84.6, VMAFMin: 74, P1: &p1, P5: &p5},
+		{Encoder: "x264", Height: 1080, Target: 3000, Kbps: 3010, VMAF: 92, VMAFHarmonic: 90.8, VMAFMin: 82, P1: &p1, P5: &p5},
+		{Encoder: "x264", Height: 1080, Target: 4000, Kbps: 4020, VMAF: 93.5, VMAFHarmonic: 92.4, VMAFMin: 84, P1: &p1, P5: &p5},
 		{Encoder: "x264", Height: 720, Target: 1000, Kbps: 1005, VMAF: 78, VMAFHarmonic: 76.2, VMAFMin: 66},
 		{Encoder: "x264", Height: 720, Target: 2000, Kbps: 2010, VMAF: 87, VMAFHarmonic: 85.6, VMAFMin: 75},
 		{Encoder: "x264", Height: 720, Target: 3000, Kbps: 3005, VMAF: 88.5, VMAFHarmonic: 87.2, VMAFMin: 77},
@@ -40,6 +42,11 @@ func sampleReport() Report {
 		Options:  opt,
 		Results:  results,
 		Analyses: []analysis.Result{analysis.Analyze("x264", points, opt)},
+		Env: Environment{
+			FFmpeg:       "ffmpeg version 7.1 Copyright (c) 2000-2024 the FFmpeg developers",
+			LibVMAF:      []string{"3.0.0"},
+			ConfigSHA256: "9f2c1e0ab34d56789f2c1e0ab34d56789f2c1e0ab34d56789f2c1e0ab34d5678",
+		},
 	}
 }
 
@@ -142,6 +149,98 @@ func reportWithMetrics() Report {
 	return r
 }
 
+// A report has to say what measured it, or an old one cannot be replayed or
+// knowingly discarded — it can only be trusted or not.
+func TestReportRecordsWhatMeasuredIt(t *testing.T) {
+	var text, md bytes.Buffer
+	if err := Text(&text, sampleReport()); err != nil {
+		t.Fatalf("Text: %v", err)
+	}
+	if err := Markdown(&md, sampleReport()); err != nil {
+		t.Fatalf("Markdown: %v", err)
+	}
+	for _, want := range []string{"ffmpeg version 7.1", "3.0.0", "9f2c1e0ab34d"} {
+		if !strings.Contains(text.String(), want) {
+			t.Errorf("text report is missing %q:\n%s", want, text.String())
+		}
+		if !strings.Contains(md.String(), want) {
+			t.Errorf("markdown report is missing %q", want)
+		}
+	}
+	// The fingerprint is shown short, never in full: it is for telling two runs
+	// apart at a glance, and the whole hash is in the JSON.
+	full := sampleReport().Env.ConfigSHA256
+	if strings.Contains(text.String(), full) {
+		t.Error("the text report should show a short fingerprint, not all 64 characters")
+	}
+}
+
+// A resumed grid can mix two libvmaf builds, and points measured before an
+// upgrade are not the same experiment as points measured after it.
+func TestReportFlagsAMixedLibVMAF(t *testing.T) {
+	r := sampleReport()
+	r.Env.LibVMAF = []string{"2.3.1", "3.0.0"}
+	var text, md bytes.Buffer
+	if err := Text(&text, r); err != nil {
+		t.Fatalf("Text: %v", err)
+	}
+	if err := Markdown(&md, r); err != nil {
+		t.Fatalf("Markdown: %v", err)
+	}
+	if !strings.Contains(text.String(), "not all measured by the same libvmaf") {
+		t.Errorf("the text report says nothing about the mix:\n%s", text.String())
+	}
+	if !strings.Contains(md.String(), "not all measured by the same libvmaf") {
+		t.Error("the markdown report says nothing about the mix")
+	}
+	// One version is the normal case and must not raise anything.
+	var quiet bytes.Buffer
+	if err := Text(&quiet, sampleReport()); err != nil {
+		t.Fatalf("Text: %v", err)
+	}
+	if strings.Contains(quiet.String(), "not all measured") {
+		t.Error("a single libvmaf version must not be flagged")
+	}
+}
+
+// The percentiles are the point of LB-9: a mean absorbs the worst frames, and
+// these are the columns that refuse to.
+func TestPercentileColumns(t *testing.T) {
+	var text, md bytes.Buffer
+	if err := Text(&text, sampleReport()); err != nil {
+		t.Fatalf("Text: %v", err)
+	}
+	if err := Markdown(&md, sampleReport()); err != nil {
+		t.Fatalf("Markdown: %v", err)
+	}
+	for _, want := range []string{"P5", "P1", "61.00", "68.00"} {
+		if !strings.Contains(text.String(), want) {
+			t.Errorf("text report is missing %q:\n%s", want, text.String())
+		}
+		if !strings.Contains(md.String(), want) {
+			t.Errorf("markdown report is missing %q", want)
+		}
+	}
+	// A log with no per-frame section gets no columns at all, the same rule the
+	// extra metrics follow.
+	bare := sampleReport()
+	var stripped []analysis.Point
+	for _, c := range bare.Analyses[0].Curves {
+		for _, p := range c.Points {
+			p.P1, p.P5 = nil, nil
+			stripped = append(stripped, p)
+		}
+	}
+	bare.Analyses = []analysis.Result{analysis.Analyze("x264", stripped, bare.Options)}
+	var plain bytes.Buffer
+	if err := Text(&plain, bare); err != nil {
+		t.Fatalf("Text: %v", err)
+	}
+	if strings.Contains(plain.String(), "P5") || strings.Contains(plain.String(), "P1") {
+		t.Errorf("no per-frame data, so no percentile columns:\n%s", plain.String())
+	}
+}
+
 func TestTextReportShowsBDRate(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Text(&buf, challengerReport()); err != nil {
@@ -238,7 +337,7 @@ func TestJSONReportRoundTrips(t *testing.T) {
 	if err := json.Unmarshal(buf.Bytes(), &back); err != nil {
 		t.Fatalf("the JSON report is not valid JSON: %v", err)
 	}
-	for _, key := range []string{"tool", "version", "input", "reference", "results", "analysis", "options"} {
+	for _, key := range []string{"tool", "version", "input", "reference", "results", "analysis", "options", "environment"} {
 		if _, ok := back[key]; !ok {
 			t.Errorf("JSON report is missing %q", key)
 		}

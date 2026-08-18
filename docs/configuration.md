@@ -87,7 +87,10 @@ vmaf:
 ```
 
 `n_subsample: 5` makes the measuring pass several times faster and is usually
-good enough to shape a curve; keep it at 1 for a final number.
+good enough to shape a curve; keep it at 1 for a final number. It also coarsens
+the **P5 and P1** columns, which are percentiles over the frames that were
+actually scored — with a subsample of 5 they describe every fifth frame, not
+every frame.
 
 `metrics` asks libvmaf for extra quality metrics while it is already decoding
 and aligning the frames, so each one costs a fraction of the VMAF pass it rides

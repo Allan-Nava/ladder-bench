@@ -3,6 +3,7 @@ package output
 import (
 	"fmt"
 	"io"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/Allan-Nava/ladder-bench/internal/analysis"
@@ -19,6 +20,7 @@ func Text(out io.Writer, r Report) error {
 		geometry(r.Reference.Media.Width, r.Reference.Media.Height),
 		r.Reference.Media.Duration, reusedNote(r.Reference.Reused))
 	fmt.Fprintf(w, "measured   %d points across %d encoder(s)\n", len(r.Results), len(r.Analyses))
+	writeEnvironment(w, r.Env)
 
 	for _, a := range r.Analyses {
 		fmt.Fprintln(w)
@@ -34,6 +36,24 @@ func Text(out io.Writer, r Report) error {
 	}
 	writeBDRates(w, r.BDRates)
 	return w.err
+}
+
+// writeEnvironment records what measured this run. It sits in the header rather
+// than a footnote: whether a report can be compared to another one is something
+// a reader needs before the numbers, not after them.
+func writeEnvironment(w io.Writer, env Environment) {
+	if env.FFmpeg != "" {
+		fmt.Fprintf(w, "ffmpeg     %s\n", env.FFmpeg)
+	}
+	if len(env.LibVMAF) > 0 {
+		fmt.Fprintf(w, "libvmaf    %s\n", strings.Join(env.LibVMAF, ", "))
+		if env.MixedLibVMAF() {
+			fmt.Fprintf(w, "           ! these points were not all measured by the same libvmaf — re-run with --force to compare them\n")
+		}
+	}
+	if env.ConfigSHA256 != "" {
+		fmt.Fprintf(w, "config     %s\n", env.ConfigShort())
+	}
 }
 
 // writeBDRates renders the cross-encoder comparison. It sits outside the
@@ -64,10 +84,18 @@ func writeBDLine(w io.Writer, label string, bd analysis.BD) {
 }
 
 func writeCurves(w io.Writer, a analysis.Result) {
-	// PSNR and SSIM only get a column when the run asked for them.
+	// PSNR and SSIM only get a column when the run asked for them; the
+	// percentiles only when the log had a per-frame section to read.
 	psnr, ssim := measured(a, pointPSNR), measured(a, pointSSIM)
+	tails := measured(a, pointP1) || measured(a, pointP5)
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	head := "  RES\tTARGET\tACTUAL\tVMAF\tHMEAN\tMIN\tGAIN/+10%"
+	// VMAF, then the walk down into the tail: the harmonic mean, the two
+	// percentiles, the single worst frame.
+	head := "  RES\tTARGET\tACTUAL\tVMAF\tHMEAN"
+	if tails {
+		head += "\tP5\tP1"
+	}
+	head += "\tMIN\tGAIN/+10%"
 	if psnr {
 		head += "\tPSNR-Y"
 	}
@@ -82,8 +110,12 @@ func writeCurves(w io.Writer, a analysis.Result) {
 			if v, ok := g[p.Target]; ok {
 				gain = fmt.Sprintf("%.2f", v)
 			}
-			row := fmt.Sprintf("  %s\t%dk\t%s\t%.2f\t%s\t%.2f\t%s",
-				res(p.Height), p.Target, kbps(p.Kbps), p.VMAF, harmonic(p.VMAFHarmonic), p.VMAFMin, gain)
+			row := fmt.Sprintf("  %s\t%dk\t%s\t%.2f\t%s",
+				res(p.Height), p.Target, kbps(p.Kbps), p.VMAF, harmonic(p.VMAFHarmonic))
+			if tails {
+				row += "\t" + optional(p.P5, "%.2f") + "\t" + optional(p.P1, "%.2f")
+			}
+			row += fmt.Sprintf("\t%.2f\t%s", p.VMAFMin, gain)
 			if psnr {
 				row += "\t" + optional(p.PSNR, "%.2f")
 			}

@@ -32,10 +32,13 @@ with a different `--output` only re-reads the measurements.
 ## The header
 
 ```
-ladder-bench 0.2.0 — 2026-08-17T22:46:51Z
+ladder-bench 0.5.0 — 2026-08-17T22:46:51Z
 source     source.mp4  1920x1080  25.00 fps  h264  6.0s
 reference  .lb-smoke/reference_full_6s.mkv  1920x1080  6.0s  (reused)
 measured   12 points across 2 encoder(s)
+ffmpeg     ffmpeg version 7.1 Copyright (c) 2000-2024 the FFmpeg developers
+libvmaf    3.0.0
+config     8975adcae3f1
 ```
 
 `source` is the file the clip was cut from; `reference` is the lossless clip
@@ -43,14 +46,34 @@ every encode and every comparison actually used. `(reused)` means the clip was
 already on disk from an earlier run — its name carries the cut, so this is a
 reuse of the same frames, not of a stale file.
 
+The last three lines are what makes the report re-checkable rather than merely
+believable: the ffmpeg that ran it, every libvmaf that wrote one of its logs, and
+a short fingerprint of the resolved config. Two reports with the same fingerprint
+measured the same experiment; two with different ones did not, whatever their
+tables look like. See [Method](method.md#5-what-the-report-records-about-itself)
+for exactly what is and is not hashed.
+
+When more than one libvmaf wrote the logs, the header says so:
+
+```
+libvmaf    2.3.1, 3.0.0
+           ! these points were not all measured by the same libvmaf — re-run with --force to compare them
+```
+
+That happens to a work dir that survived an ffmpeg upgrade. The numbers on either
+side of it are fine; putting them on one curve is not.
+
 ## Measurements
 
 ```
-  RES   TARGET  ACTUAL  VMAF   HMEAN  MIN    GAIN/+10%  PSNR-Y  SSIM
-  720p  600k    651k    80.29  80.09  72.94  —          35.88   0.9910
-  720p  1500k   1544k   93.12  93.09  90.14  0.94       40.49   0.9973
-  720p  3000k   3108k   97.18  97.17  95.49  0.40       46.26   0.9992
+  RES   TARGET  ACTUAL  VMAF   HMEAN  P5     P1     MIN    GAIN/+10%  PSNR-Y
+  720p  800k    711k    70.15  56.56  16.78  16.35  15.36  —          33.04
+  720p  2500k   2030k   86.12  68.44  18.12  17.00  16.95  0.86       38.39
 ```
+
+That is a real run on a clip with one broken second in the middle of it, and it
+is the argument for the whole table: **VMAF says 70, the 1st percentile says 16**.
+A single mean would have called the cheap rung acceptable.
 
 | Column | What it is |
 |---|---|
@@ -59,10 +82,16 @@ reuse of the same frames, not of a stale file.
 | `ACTUAL` | The bitrate the file **is** — its size over the clip duration. Rate control never lands exactly on target, and every number downstream uses this one. |
 | `VMAF` | The pooled mean over the clip, measured at the reference resolution. This is the column every recommendation is computed from. |
 | `HMEAN` | The harmonic mean of the same frames, which weighs the worst ones more heavily. Well below `VMAF` means a few seconds fell apart and the average absorbed it; agreeing with it means the rung was consistently that good. |
-| `MIN` | The worst single frame. A rung whose mean is 93 and whose minimum is 70 is not a rung that looks like 93. |
+| `P5`, `P1` | The 5th and 1st percentile of the per-frame scores — the worst moments, by nearest rank, so each is a score some frame really received. Present only when the log has a per-frame section. |
+| `MIN` | The worst single frame, i.e. P0. Useful next to `P1`: when they are far apart, one frame was an outlier; when they agree, the tail is genuinely that bad. |
 | `GAIN/+10%` | VMAF points bought by this step, per +10% bitrate. Relative on purpose: +500 kbps means something entirely different at 800 kbps and at 6000 kbps. The first row of each resolution has no previous step, hence `—`. |
 | `PSNR-Y` | Peak signal-to-noise ratio in dB, Y plane. Present only with [`vmaf.metrics`](configuration.md#vmaf). |
 | `SSIM` | Structural similarity, 0–1. Present only with `vmaf.metrics`. |
+
+`P5` and `P1` come out of the per-frame section every real libvmaf log already
+carries, so no point is ever re-measured to obtain them — and `n_subsample`
+coarsens them, because they cover the frames that were scored rather than all of
+them.
 
 `PSNR-Y` and `SSIM` **have no column at all** unless the run asked for them: a
 column of dashes would say "we looked and found nothing" instead of "we did not
@@ -230,6 +259,7 @@ between two runs will diff.
 | `results` | array | One entry per grid point — the raw measurements. |
 | `analysis` | array | One entry per encoder — everything derived. |
 | `bd_rates` | array | Cross-encoder comparisons. **Absent** with a single encoder: nothing was compared, which is not the same as finding no difference. |
+| `environment` | object | What measured this: `ffmpeg` (the version line, verbatim), `libvmaf` (every version that wrote one of these logs), `config_sha256` (the fingerprint of the resolved config, in full — the text report shows the first twelve characters). |
 
 ### `reference`
 
@@ -258,7 +288,7 @@ One per grid point. This is the only place the per-point cost and timings live.
 | `encoder`, `codec`, `preset`, `extra_args` | | The encoder configuration this point used. |
 | `height`, `target_kbps` | number | The grid coordinates. |
 | `out`, `vmaf_log` | string | The encode and the libvmaf log on disk. The encode is deleted after the run unless `keep_encodes` is set; the log stays, because it is the measurement. |
-| `vmaf` | object | `mean`, `min`, `harmonic_mean`, `frames` as libvmaf pooled them, plus `psnr_y` and `ssim` when the run asked for them. Both keys are **absent** rather than zero when it did not: a PSNR of 0 dB would be a catastrophe, and absent is not catastrophic. |
+| `vmaf` | object | `mean`, `min`, `harmonic_mean`, `frames` as libvmaf pooled them; `vmaf_p1` and `vmaf_p5` from the per-frame section; `libvmaf_version` — recorded per point, so a grid resumed across an ffmpeg upgrade shows which points came from which build; plus `psnr_y` and `ssim` when the run asked for them. The optional keys are **absent** rather than zero when they were not measured: a PSNR of 0 dB would be a catastrophe, and absent is not catastrophic. |
 | `bytes` | number | The encode's real size. |
 | `actual_kbps` | number | `bytes` over the clip duration — the bitrate every downstream number uses. |
 | `encode_ns`, `measure_ns` | number | Wall-clock nanoseconds for the encode and the VMAF pass. `0` for a reused point. |
@@ -284,9 +314,9 @@ encoder can produce, so the analysis never pools them.
 
 **A point** (used in `curves[].points`, `hull` and `ladder`):
 `encoder`, `height`, `target_kbps`, `kbps` (the real one), `vmaf`, `vmaf_min`,
-`vmaf_harmonic_mean`, and `psnr_y` / `ssim` when they were measured. Only `kbps`
-and `vmaf` take part in the arithmetic; the rest is carried so a rung can be
-judged on more than its mean.
+`vmaf_harmonic_mean`, `vmaf_p1` / `vmaf_p5`, and `psnr_y` / `ssim` when they were
+measured. Only `kbps` and `vmaf` take part in the arithmetic; the rest is carried
+so a rung can be judged on more than its mean.
 
 **A curve** (`curves[]`): `height`, `points`, and
 
@@ -330,6 +360,13 @@ ladder-bench run --output json --out ladder.json
 jq -r '.analysis[] | select(.encoder=="x264-fast")
        | .curves[] | .height as $h | .points[]
        | "\($h)p \(.kbps|round)k \(.vmaf)"' ladder.json
+
+# every rung whose worst frames are far below its average
+jq -r '.results[] | select(.vmaf.vmaf_p1 != null and .vmaf.vmaf_p1 < .vmaf.mean - 15)
+       | "\(.height)p \(.target_kbps)k mean \(.vmaf.mean) p1 \(.vmaf.vmaf_p1)"' ladder.json
+
+# was everything measured by the same libvmaf?
+jq -r '.environment.libvmaf | if length > 1 then "MIXED: \(.)" else "one build: \(.[0])" end' ladder.json
 
 # every rung where the harmonic mean fell more than 2 points below the mean
 jq -r '.results[] | select(.vmaf.harmonic_mean < .vmaf.mean - 2)
